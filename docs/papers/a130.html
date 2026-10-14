@@ -1,0 +1,377 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学习为 LLM 检索 In-Context 示例</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Learning to Retrieve In-Context Examples for Large Language Models</h1>
+<p class="lead">学习为 LLM 检索 In-Context 示例</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">RAG与检索</span><span class="chip">提示技术</span><span class="chip">上下文窗口</span><span class="chip">成本与效率</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a130.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>该论文解决 in-context learning (ICL) 效果高度依赖 few-shot 示例质量、而人工挑选难以扩展的问题，提出 LLM-R 框架自动训练为 LLM 检索高质量 in-context 示例的 dense retriever。方法上先用 BM25 召回候选，再用冻结 LLM 按候选条件下 groundtruth 输出的 log-likelihood 对候选排序，据此训练 cross-encoder 奖励模型捕捉细粒度排序偏好，最后通过知识蒸馏训练 bi-encoder 检索器并迭代优化。在覆盖 9 类共 30 个 NLP 任务、以 LLaMA-7B 评测的实验中，平均比随机选择提升 7.8%，两轮迭代后平均分从 63.5 提升到 66.5，在 4 个 held-out 任务上比次优的 E5base 平均高 5.4 分，并能泛化到不同规模的 LLM。分析显示收益主要来自检索到与测试样例输入模式相似或标签相同的示例：分类类任务收益大，而 closed-book QA、常识推理等依赖模型自身能力的任务收益有限；示例数超过 4 个后收益递减，且 BM25 已是相当强的 baseline。</p>
+<h2>问题</h2><p>In-context learning 的效果高度依赖所选 few-shot 示例的质量，LLM 对示例质量非常敏感；已有基于 LLM 反馈训练检索器的方法要么只针对较小语言模型，要么未能以有原则的方式利用 LLM 的细粒度反馈信号。论文要解决如何自动学习一个 dense retriever，为 LLM 的 in-context learning 从统一示例池中检索高质量示例。</p>
+<h2>方法</h2><p>提出 LLM-R 迭代训练框架，含四个环节：(1) 训练数据生成：用 BM25 作为初始检索器从各任务训练集并集构成的示例池（约 6.3M 条）召回 top-n 候选，再用冻结 LLM 按候选条件下 groundtruth 输出的 log-likelihood p(y|x, xi, yi) 降序排序（只需一次前向传播，不依赖任务特定指标）；(2) 奖励建模：训练 cross-encoder 奖励模型（ELECTRAbase 初始化），从排序靠前候选采正例、靠后采难负例，用交叉熵损失捕捉 LLM 的细粒度排序偏好，其分数比 LLM log-likelihood 更适合作为蒸馏的软标签；(3) 知识蒸馏：训练 bi-encoder dense retriever（E5base 初始化，查询与候选共享编码器），损失为 KL 散度蒸馏损失（仅在难负例上计算）与 InfoNCE 对比损失的加权和；(4) 迭代训练：用上一轮检索器重新召回候选，挖掘更好的正例与难负例。推理时用训练好的检索器取 top-k 作为 in-context 示例拼入 prompt。</p>
+<h2>关键结果</h2><p> 在 9 类共 30 个 NLP 任务上（LLaMA-7B 评测），LLM-R 相比随机选择平均提升 7.8% 的 in-context learning 性能</p><p> 第一轮迭代后超过所有 baseline（平均分 63.5 → 65.7），第二轮迭代升至 66.5（+0.8），后续迭代无明显提升</p><p> 在 4 个 held-out 任务（QNLI、PIQA、WSC273、Yelp）上比次优的 E5base 平均高 5.4 分</p><p> 跨 LLM 泛化：在 GPT-Neo-2.7B、LLaMA-13B、GPT-35-Turbo 上持续优于 BM25 baseline，小尺寸语言模型收益尤其显著</p><p> 消融实验：去掉奖励模型（仅用对比损失）平均分下降 0.8；用 LLM log-likelihood 直接作蒸馏目标比本文奖励模型低 0.5 分</p><p> Scaling 分析：in-context 示例数超过 4 个后收益递减；large 尺寸检索器比 small/base 带来更明显提升</p><p> 训练成本：用 LLaMA-7B 对 200k 样本的候选排序约需 12 小时（8 张 V100 GPU），检索器与奖励模型训练合计不到 10 小时</p>
+<h2>创新点</h2><p>相对已有工作的区别：(1) 相比 EPR 等只针对较小语言模型的方法，本文面向 LLaMA-7B 等大模型并验证跨模型规模（2.7B 到数百亿参数）的泛化；(2) 相比未充分利用细粒度反馈的统一多任务检索方法，本文用 LLM 条件 log-likelihood 排序产生细粒度监督，先训练 cross-encoder 奖励模型再蒸馏给 bi-encoder，用更有信息量的软标签替代启发式构造的 one-hot 标签；(3) 奖励模型在训练时可访问 groundtruth 标签 y（测试时不可得），这是与 ad-hoc 检索中 re-ranker 的关键差异；(4) 采用迭代训练不断挖掘更好的正例与难负例。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.2 提示工程 | 3.5 评测与可靠使用</p><p><b>理由：</b>论文核心是&#x27;为 LLM 自动检索高质量 in-context 示例&#x27;，直接命中 3.1 的 RAG/检索增强与结构化上下文组织（检索增强的 ICL 是上下文组装的关键手段），也直接命中 3.2 的 in-context learning 与提示示例选择；其对示例数量、检索器规模与推理成本之间 trade-off 的系统分析涉及 3.5 的成本与效率优化。团队构建知识库问答、代码生成与审查等应用时，few-shot 示例的选择是影响产出质量的关键环节，该文提供了可复用的训练管线与多条可直接指导选型的工程结论（BM25 是强 baseline、4 个示例后收益递减、小模型受益更大、奖励模型蒸馏优于直接用 LLM 分数）。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2307.07164v2  [cs.CL]  2024年1月26日</p>
+<h2>Learning to Retrieve In-Context Examples for Large Language Models</h2>
+<p>学习为大语言模型检索上下文示例</p>
+<p>Liang Wang、Nan Yang、Furu Wei</p>
+<p>微软研究院</p>
+<p>{wangliang,nanya,fuwei}@microsoft.com</p>
+<h2>Abstract</h2>
+<p>大语言模型（LLMs）已展现出上下文学习（in-context learning）的能力，使其能够基于少量输入-输出示例执行各种任务。然而，上下文学习的有效性在很大程度上依赖于所选示例的质量。在本文中，我们提出了一种新颖的框架，用于迭代训练稠密检索器（dense retrievers），从而为大语言模型识别高质量的上下文示例。我们的框架首先基于LLMs的反馈训练一个奖励模型（reward model）来评估候选示例的质量，随后通过知识蒸馏训练基于双编码器（bi-encoder）的稠密检索器。我们在一组共30个任务上的实验表明，我们的框架显著提升了上下文学习的性能。此外，我们展示了我们的框架对训练期间未见任务的泛化能力。深入分析表明，我们的模型通过检索具有相似模式的示例来提升性能，且这种增益在不同规模的LLMs上保持一致。代码和数据可在 https://github.com/microsoft/LMOps/ tree/main/llm_retriever 获取。</p>
+<h2>1 Introduction</h2>
+<p>上下文学习（in-context learning, ICL）(Brown et al., 2020) 是一种新兴的学习范式，它允许大语言模型（LLMs）利用少样本示例来执行任务，而无需对模型参数进行任何更新。这种方法与传统的机器学习形成了鲜明对比，在传统机器学习中，模型通常是在大规模的标注示例数据集上进行训练的 (Devlin et al., 2019)。上下文学习在标注数据稀缺或获取成本高昂的领域具有显著优势，因为它大大减少了所需标注数据的数量。</p>
+<p>在理解和提升上下文学习的有效性方面存在若干挑战。其中一个挑战是，LLMs 对所提供的上下文示例的质量可能高度敏感 (Liu et al., 2022; Min et al., 2022)。如果这些示例不能代表目标任务，那么模型可能无法有效地学习。实证研究 (Liu et al., 2022; Luo et al., 2023) 已经证明，使用 BM25 算法或现成的句子嵌入 (Reimers and Gurevych, 2019) 从训练集中检索示例，相比随机选择能够显著提升上下文学习的性能。另一种方法是基于 LLMs 的反馈信号来训练稠密检索器，这种方法在语义解析 (Rubin et al., 2022)、跨任务提示检索 (Cheng et al., 2023) 以及统一的多任务检索 (Li et al., 2023) 中已展现出可喜的成果。然而，现有方法要么只关注相对较小的语言模型 (Rubin et al., 2022)，要么未能以有原则的方式利用来自 LLMs 的细粒度反馈信息 (Li et al., 2023)。</p>
+<p>在本文中，我们提出了一个新颖的框架 LLM-R（ LLMR etriever），旨在为大语言模型检索高质量的上下文示例。给定一组初始检索到的候选示例，我们的框架基于真实输出的条件 LLM 对数概率对其进行排序。随后，训练一个基于交叉编码器（cross-encoder）的奖励模型来捕获来自 LLMs 的细粒度排序信号。最后，通过知识蒸馏训练一个基于双编码器（bi-encoder）的稠密检索器。奖励模型在提供更适合蒸馏的、信息更丰富的软标签方面发挥着关键作用，而不是使用启发式构造的独热（one-hot）标签。通过基于最新的稠密检索器检索一组新的候选示例，该流程可以迭代多次。</p>
+<p>出于评估目的，我们构建了一个多样化的任务集，共包含30个NLP任务，涵盖问答、自然语言推理、常识推理和摘要生成等9个类别。使用 LLaMA-7B（Touvron et al., 2023）获得的实验结果表明，与随机选择相比，我们的模型将上下文学习性能平均提升了7.8%。在留出任务以及不同规模的LLMs上也观察到了类似的提升。进一步分析表明，检索排名靠前的示例与测试示例具有相似的输入模式或相同的标签。我们的模型对于拥有充足训练样本的分类任务尤为有效。相比之下，闭卷问答和常识推理等任务更多依赖于LLMs的固有能力，对上下文示例质量的敏感度较低。</p>
+<h2>2 Related Work</h2>
+<p>上下文学习（In-Context Learning）是大语言模型（LLMs）的一种涌现特性，使模型能够在仅给定少量输入-输出示例的条件下执行各种任务，而无需任何参数更新或微调。这一特性已在 GPT-3（Brown et al., 2020）、GPTNeo（Black et al., 2021）和 LLaMA（Touvron et al., 2023）等大语言模型中得到验证，并引起了研究界的广泛关注。其中一个研究方向专注于理解上下文学习的底层机制与原理。例如，Xie 等人将上下文学习视为隐式贝叶斯推断，而 Dai 等人则将其解释为元优化。</p>
+<p>另一个研究方向是探索为 LLMs 选择和设计上下文示例的不同策略。近期研究（Liu et al., 2022; Rubin et al., 2022; Li et al., 2023; Luo et al., 2023）表明，使用 BM25 算法或基于 LLM 反馈微调稠密检索器来从训练集中检索示例，可以提升上下文学习的性能。我们的工作也属于这一领域，提出了一种新颖的训练方法。为了对上下文示例之间的交互进行建模，已有初步探索引入了行列式点过程（determinantal point process）（Ye et al., 2023）和序贯决策（Zhang et al., 2022）。相比之下，Structured Prompting（Hao et al., 2022）突破了输入上下文长度的限制，将上下文示例的数量扩展到数千个。</p>
+<p>稠密检索（Dense Retrieval）是一种广泛使用的信息检索方法，它利用稠密向量在潜在空间中对查询与文档进行语义匹配（Reimers and Gurevych, 2019; Wang et al., 2022）。与 BM25 等稀疏检索方法相比，稠密检索利用预训练语言模型（PLMs）（Devlin et al., 2019）强大的建模能力来学习相关性函数，并有望克服词汇失配问题。为提升稠密检索的性能，已有多种技术被提出，例如难负例挖掘（Karpukhin et al., 2020）、知识蒸馏（Ren et al., 2021）和持续预训练（Wang et al., 2022）。</p>
+<p>检索增强大语言模型（Retrieval Augmented LLMs）将大语言模型（LLMs）的生成能力与从外部来源检索相关信息的能力相结合（Ram et al., 2023; Lewis et al., 2020; Shi et al., 2023）。这一范式有潜力提升生成文本的事实一致性，使 LLMs 感知最新知识，并提供一种自然的来源归因方式（Nakano et al., 2021）。检索到的信息可以通过多种机制融入 LLMs，例如输入拼接（Shi et al., 2023）、中间注意力融合（Borgeaud et al., 2022）以及输出插值（Khandelwal et al., 2020）。对于上下文学习（in-context learning），检索增强的目标是通过检索信息丰富的示例来提升 LLMs 在下游任务上的性能（Li et al., 2023; Luo et al., 2023）。</p>
+<h2>3 Preliminaries</h2>
+<p>在本节中，我们对上下文示例检索（in-context example retrieval）的问题设定进行简要介绍。给定来自目标任务的测试示例 x test 以及来自预定义池 P 的 k 个上下文示例 { ( x i , y i ) } k i =1，采用冻结的语言模型 M 通过自回归解码来预测输出 y ′ test。上下文示例检索的主要目标是从 P 中检索出 k 个示例，使得基于某些任务特定的指标，预测输出 y ′ test 尽可能接近真实输出 y test。在本文中，示例池 P 是我们评估中所有任务的训练集的并集。</p>
+<p>直接的解决方案包括利用 BM25 算法或现成的文本嵌入模型（Wang et al., 2022; Liu et al., 2022），将 x test 作为查询来从 P 中检索示例。尽管这些方法简单，但已有实证结果表明，与随机选择基线相比，它们更为有效。相比之下，我们的框架旨在通过利用 LLMs 的反馈，学习一个为上下文示例检索定制的稠密检索器。</p>
+<figure><img src="assets/a130/figures/fig_1.png" alt="Figure 1: The overall architecture of our proposed framework LLM-R. The training process comprises three stages: generating training data based on an initial retriever and LLM feedback, reward modeling, and training dense retrievers by distilling the knowledge from the reward model. At inference time, the trained dense retriever is employed to retrieve in-context examples from the pool P and the retrieved examples are fed to the LLM to generate the output." loading="lazy"></figure>
+<figcaption>Figure 1: The overall architecture of our proposed framework LLM-R. The training process comprises three stages: generating training data based on an initial retriever and LLM feedback, reward modeling, and training dense retrievers by distilling the knowledge from the reward model. At inference time, the trained dense retriever is employed to retrieve in-context examples from the pool P and the retrieved examples are fed to the LLM to generate the output.</figcaption>
+<h2>4 Methodology</h2>
+<p>我们提出的框架如图 1 所示。它包含四个主要组成部分：训练数据生成、奖励建模、稠密检索器训练和推理，以下小节将对其进行详细介绍。</p>
+<h2>4.1 Training Data Generation</h2>
+<p>初始候选检索 给定训练集中的一个示例 (x, y)，其中 x 为输入，y 为真实输出，我们使用初始检索器从示例池 P 中检索前 n 个候选 {(x_i, y_i)}_{i=1}^{n}。示例池 P 包含来自多种任务混合的训练示例。由于在训练期间 (x, y) ∈ P 成立，我们将该示例自身从检索结果中排除。</p>
+<p>在本文中，我们采用无监督的 BM25 算法作为初始检索器。查询仅由输入 x 构成，而每个检索候选则是输入 x_i 与输出 y_i 的字符串拼接。这一设置与测试时的场景相符，即真实输出不可用。在初始检索器较为有效的情况下，前 n 个候选中很可能包含一些正例和难负例。</p>
+<p>使用大语言模型（LLM）对候选进行排序 为了评估检索到的候选的质量，我们利用来自冻结 LLM 的反馈信号。具体而言，我们基于真实输出 y 的对数似然按降序对候选进行排序，如下式所示：</p>
+<p>其中，p(y | x, x_i, y_i) 表示在给定输入 x 和第 i 个候选 (x_i, y_i) 的条件下 y 的条件概率。值得注意的是，尽管语言模型具有自回归特性，计算 p(y | x, x_i, y_i) 仅需一次前向传播，且不依赖任何任务特定的指标。在实际应用中，这有助于降低 LLM 的推理成本。</p>
+<h2>4.2 Reward Modeling</h2>
+<p>为了捕捉 LLM 对检索到的候选样本的偏好，并为稠密检索器（dense retriever）提供细粒度的监督，我们提出训练一个基于交叉编码器（cross-encoder）的奖励模型。对于一个训练样本 ( x, y )，我们首先从排名靠前的候选中采样一个正样本 ( x + , y + )，并从排名靠后的候选中采样 N neg 个难负样本 { ( x - i , y - i ) } N neg i =1。奖励模型以 ( x, y, x + , y + ) 的拼接作为输入，并产生一个实值分数 s ( x, y, x + , y + )，对难负样本也作同样处理。该模型通过最小化以下交叉熵损失进行训练：</p>
+<p>值得注意的是，奖励模型仅用于为稠密检索器提供监督，并且能够访问真实标签 y，而该标签在测试时是不可获得的。这是它与即席检索（ad-hoc retrieval）场景中重排序器（re-ranker）的一个关键区别（Ren et al., 2021）。与基于双编码器（bi-encoder）的稠密检索器相比，奖励模型使输入之间能够进行充分的交互，因此可以充当教师模型。LLM 产生的对数似然分数在不同样本之间表现出很高的方差。相比之下，奖励模型的分数更适合用于知识蒸馏。</p>
+<h2>4.3 Training LLM Retrievers with Knowledge Distillation</h2>
+<p>为了实现高效推理，稠密检索器（dense retriever）基于双编码器（bi-encoder）架构。给定查询 x，我们通过对最后一层隐藏状态执行平均池化来计算其低维嵌入 h x。类似地，我们通过将 x i 与 y i 拼接作为输入，得到候选 ( x i , y i ) 的嵌入 h ( x i ,y i )。匹配分数 f ( x, x i , y i ) 计算为经温度缩放的余弦相似度 cos( h x , h ( x i ,y i ) ) /τ，其中 τ 是温度超参数。在本文中，我们对查询和检索候选使用共享编码器。</p>
+<p>稠密检索器通过从奖励模型蒸馏知识来进行训练。我们使用 KL 散度损失 L distill = KL ( p reward || p retriever ) 来度量奖励模型分布 p reward 与检索器分布 p retriever 之间的不匹配。出于效率考虑，L distill 仅在难负例（hard negatives）上计算。为了纳入批内负例（in-batch negatives），我们还引入了基于 InfoNCE 的对比损失 L cont（Chen et al., 2020），将奖励最高的候选视为正例。最终的损失函数 L retriever 是对比损失与知识蒸馏损失的加权和：</p>
+<p>其中，α 是控制两种损失相对重要性的常数。</p>
+<p>迭代训练 如图 1 所示，在第 i 次迭代中训练得到的检索器可用于为后续的第 i +1 次迭代检索候选。在第一次迭代中，候选使用 BM25 检索得到。这种迭代训练方法（Xiong et al., 2021; Li et al., 2023）能够通过挖掘更好的正例和难负例来提升检索器质量。</p>
+<h2>4.4 Evaluation of LLM Retrievers</h2>
+<p>给定一个测试样例 x test，我们使用训练好的检索器计算其嵌入 h test，并从候选池 P 中检索 top k 个候选作为 k-shot 上下文示例（in-context examples）。LLM 的输入是 k-shot 示例与 x test 的拼接。整体流程如图 1 所示。</p>
+<p>根据 x test 的任务类型，采用不同的解码策略来生成最终预测。对于分类任务，我们使用带约束解码的贪心搜索，以确保预测结果是有效的类别标签。对于多选题任务，所有选项根据平均 token 级对数似然得分进行排序，得分最高的选项被选为模型的预测。生成任务则使用不带任何约束的贪心搜索。在定量评估中，使用任务特定的指标将预测结果与真实标签 y test 进行比较。</p>
+<h2>5.1 Evaluation Setup</h2>
+<p>我们总共使用来自 9 个不同类别的 30 个公开可用数据集¹进行训练和评估，如图 2 所示。该数据集集合基于 FLAN（Wei et al., 2022）和 UPRISE（Cheng et al., 2023）。与我们的工作不同，FLAN 专注于微调语言模型使其遵循指令，而 UPRISE 则是为跨任务检索而设计的。为了测试模型对未见任务的泛化能力，我们从训练过程中留出了四个数据集，即 QNLI、PIQA、WSC273 和 Yelp。检索池由所有训练样本的并集构成，共计约 6.3M 个样本。对于每个数据集，我们最多采样 30k 个样本用于训练、10k 个样本用于评估，以降低大语言模型（LLM）</p>
+<p>1 我们交替使用“数据集”和“任务”这两个术语。</p>
+<figure><img src="assets/a130/figures/fig_2.png" alt="Figure 2: The collection of datasets used in our experiments. The yellow-colored datasets are held out and excluded from training. For further information, please refer to Table 8 in the Appendix." loading="lazy"></figure>
+<figcaption>Figure 2: The collection of datasets used in our experiments. The yellow-colored datasets are held out and excluded from training. For further information, please refer to Table 8 in the Appendix.</figcaption>
+<div class="tablewrap"><table><thead><tr><th># of datasets →</th><th>CQA 3</th><th>Comm. 3</th><th>Coref. 3</th><th>NLI 5</th><th>Para. 3</th><th>RC 4</th><th>Sent. 3</th><th>D2T 3</th><th>Summ. 3</th><th>Avg 30</th></tr></thead><tbody>
+<tr><td>Zero-shot</td><td>29.0</td><td>71.5</td><td>66.8</td><td>44.0</td><td>60.0</td><td>41.3</td><td>50.5</td><td>25.6</td><td>17.5</td><td>44.9</td></tr>
+<tr><td>Random</td><td>40.4</td><td>77.6</td><td>67.2</td><td>50.9</td><td>56.6</td><td>58.1</td><td>88.8</td><td>47.0</td><td>38.9</td><td>57.9</td></tr>
+<tr><td>K-means</td><td>41.6</td><td>79.5</td><td>66.0</td><td>50.8</td><td>52.6</td><td>53.6</td><td>90.9</td><td>42.5</td><td>40.5</td><td>57.0</td></tr>
+<tr><td>BM25</td><td>45.9</td><td>78.1</td><td>62.9</td><td>54.7</td><td>66.1</td><td>59.9</td><td>89.6</td><td>49.3</td><td>50.0</td><td>61.3</td></tr>
+<tr><td>E5 base</td><td>49.0</td><td>79.8</td><td>64.6</td><td>53.6</td><td>58.0</td><td>60.2</td><td>94.4</td><td>48.0</td><td>50.0</td><td>61.4</td></tr>
+<tr><td>SBERT</td><td>48.5</td><td>79.3</td><td>64.2</td><td>57.5</td><td>64.1</td><td>60.6</td><td>91.9</td><td>47.4</td><td>49.3</td><td>62.1</td></tr>
+<tr><td>EPR †</td><td>48.4</td><td>79.3</td><td>64.4</td><td>64.3</td><td>65.1</td><td>59.8</td><td>91.7</td><td>49.7</td><td>50.0</td><td>63.5</td></tr>
+<tr><td>LLM-R (1 iter)</td><td>48.8</td><td>80.1</td><td>67.6</td><td>71.9</td><td>66.5</td><td>60.0</td><td>93.5</td><td>50.1</td><td>50.8</td><td>65.7</td></tr>
+<tr><td>LLM-R (2 iter)</td><td>48.7</td><td>80.4</td><td>70.4</td><td>72.5</td><td>71.5</td><td>59.0</td><td>93.6</td><td>49.9</td><td>51.1</td><td>66.5</td></tr>
+<tr><td>LLM-R (3 iter)</td><td>48.9</td><td>80.0</td><td>70.8</td><td>72.6</td><td>72.8</td><td>58.0</td><td>92.9</td><td>49.8</td><td>50.8</td><td>66.4</td></tr>
+<tr><td>Std dev.</td><td>± 0.2</td><td>± 0.8</td><td>± 0.7</td><td>± 0.1</td><td>± 1.1</td><td>± 0.0</td><td>± 0.4</td><td>± 0.0</td><td>± 0.1</td><td>± 0.2</td></tr>
+</tbody></table></div>
+<p>| # of datasets →   | CQA 3   | Comm. 3   | Coref. 3   | NLI 5   | Para. 3   | RC 4   | Sent. 3   | D2T 3   | Summ. 3   | Avg 30   |</p>
+<figcaption>Table 1: Our main results. We report the average metrics for Close QA (CQA), Commonsense Reasoning (Comm.), Coreference (Coref.), NLI, Paraphrase (Para.), Reading Comprehension (RC), Sentiment (Sent.), Data-to-text (D2T), Summarize (Summ.). The standard deviation is computed over 3 runs with the &#x27;Random&#x27; baseline. Dense retriever baselines include E5 (Wang et al., 2022), SBERT (Reimers and Gurevych, 2019), and EPR (Rubin et al., 2022). † : Our re-implementation for fair comparison.</figcaption>
+<p>推理成本。在评估中，我们报告每个任务类别的平均指标。有关每个数据集所使用的具体指标，请参见表 8。</p>
+<p>在主实验中，除非另有说明，我们使用 LLaMA-7B（Touvron et al., 2023）作为用于候选排序和任务评估的默认 LLM。奖励模型使用 ELECTRAbase（Clark et al., 2020）进行初始化，检索器使用 E5base（Wang et al., 2022）进行初始化。基线方法包括零样本提示、k-means 聚类、随机选择、BM25（Lin et al., 2021），以及两个现成的稠密检索器，即 SBERT（all-mpnet-base-v2）（Reimers and Gurevych, 2019）和 E5base。除零样本评估外，我们为每个测试输入检索 8 个上下文示例。更多实现细节和训练超参数见附录 A。</p>
+<h2>5.2 Main Results</h2>
+<p>表 1 展示了我们实验的主要结果。我们观察到，简单的 BM25 算法可以作为一个强大的基线，相比随机选择策略表现出持续的改进。这一结论与 Luo 等人的发现一致。BM25 的这种有效性可以通过提供一组高质量候选示例来帮助预热第一轮训练迭代。我们也尝试使用 E5base 作为初始检索器，但与 BM25 相比其收益微乎其微。因此，出于简单性的考虑，我们坚持使用 BM25。</p>
+<p>在第一轮迭代之后，我们提出的模型 LLM-R 通过在 BM25 检索到的候选示例上进行训练，超越了所有基线（63.5 → 65.7）。第二轮迭代纳入了从 &quot;LLM-R (1 iter)&quot; 中挖掘出的正例和难负例，将平均分数提升至 66.5（+0.8）。后续迭代并未带来实质性改进，表明模型已经收敛。</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>CQA</th><th>Comm.</th><th>Coref.</th><th>NLI</th><th>Para.</th><th>RC</th><th>Sent.</th><th>D2T</th><th>Summ.</th><th>Avg</th></tr></thead><tbody>
+<tr><td>LLM-R (1 iter)</td><td>48.8</td><td>80.1</td><td>67.6</td><td>71.9</td><td>66.5</td><td>60</td><td>93.5</td><td>50.1</td><td>50.8</td><td>65.7</td></tr>
+<tr><td>model variants</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>w/o reward model</td><td>48.8</td><td>79.1</td><td>64.3</td><td>68.9</td><td>70.2</td><td>60.5</td><td>91.7</td><td>49.4</td><td>50.5</td><td>64.9 ↓ 0 . 8</td></tr>
+<tr><td>reward model w/o label y +</td><td>48.5</td><td>79.7</td><td>67.5</td><td>64.1</td><td>62.7</td><td>60.8</td><td>92.3</td><td>49.6</td><td>49.8</td><td>63.8 ↓ 1 . 9</td></tr>
+<tr><td>LLM score as reward</td><td>48</td><td>79.4</td><td>67</td><td>67</td><td>74</td><td>60.5</td><td>91.5</td><td>49.6</td><td>50.3</td><td>65.2 ↓ 0 . 5</td></tr>
+<tr><td>retriever initialization initialize w/ BERT base</td><td>48.7</td><td>79.6</td><td>69.4</td><td>70.9</td><td>63</td><td>60.7</td><td>92</td><td>50</td><td>50.2</td><td>65.2 ↓ 0 . 5</td></tr>
+</tbody></table></div>
+<p>|                                                  |   CQA |   Comm. |   Coref. |   NLI |   Para. |   RC |   Sent. |   D2T |   Summ. | Avg          |</p>
+<figcaption>Table 2: Different training variants of LLM-R. &#x27;w/o reward model&#x27; is trained solely with contrastive loss on LLM ranked candidates. &#x27;LLM score as reward&#x27; uses the log-likelihood score from LLMs as the distillation target. Neither of these two variants utilizes the reward model. &#x27;reward model w/o label y + &#x27; denotes that the reward model is trained without access to the groundtruth label y + .</figcaption>
+<div class="tablewrap"><table><thead><tr><th></th><th>Zero-shot</th><th>Random</th><th>K-means</th><th>BM25</th><th>E5 base</th><th>SBERT</th><th>LLM-R</th></tr></thead><tbody>
+<tr><td>QNLI</td><td>49.2</td><td>56.4</td><td>53.4</td><td>62.2</td><td>61.5</td><td>61.9</td><td>69.6 ↑ 7 . 7</td></tr>
+<tr><td>PIQA</td><td>77</td><td>79.1</td><td>79.4</td><td>81.3</td><td>81.3</td><td>80.7</td><td>81.6 ↑ 0 . 3</td></tr>
+<tr><td>WSC273</td><td>74</td><td>74.4</td><td>74.7</td><td>64.5</td><td>65.2</td><td>62.6</td><td>79.5 ↑ 4 . 8</td></tr>
+<tr><td>Yelp</td><td>47.9</td><td>92</td><td>93.5</td><td>93.5</td><td>97.3</td><td>95.9</td><td>95.9 ↓ 1 . 4</td></tr>
+<tr><td>Average</td><td>62</td><td>75.5</td><td>75.3</td><td>75.4</td><td>76.3</td><td>75.3</td><td>81.7 ↑ 5 . 4</td></tr>
+</tbody></table></div>
+<p>|         |   Zero-shot |   Random |   K-means |   BM25 |   E5 base |   SBERT | LLM-R        |</p>
+<figcaption>Table 3: Generalization to four held-out tasks.</figcaption>
+<h2>6 Analysis</h2>
+<p>在本节中，我们考察了 LLM-R 在各种任务、LLM 和模型变体上的性能。除非另有明确说明，&quot;LLM-R&quot; 均指经过 2 轮训练迭代的模型。</p>
+<h2>6.1 Training Pipeline of LLM-R</h2>
+<p>我们在表 2 中研究了若干 LLM-R 变体，以了解每个组件的贡献。&#x27;w/o reward model&#x27;（无奖励模型）变体移除了知识蒸馏损失，平均得分下降 0.8 分。这表明奖励模型对 LLM-R 的性能至关重要。受 REPLUG (Shi et al., 2023) 的启发，我们实验了一种使用 LLM 的对数似然（log-likelihood）作为蒸馏奖励的变体。尽管该变体优于 &#x27;w/o reward model&#x27; 变体，但仍比我们的方法落后 0.5 分。LLM 的平均 token 级对数似然本质上并不是一个概率分布。我们通过实验观察到，某些训练样本的反馈分数集中在非常窄的范围内，而其他分数则更为分散。这使得它在 KL 散度（KL-divergence）框架内作为目标分布并非最优。将检索器的初始化从 E5 (Wang et al., 2022) 更改为 BERT (Devlin et al., 2019) 会导致性能下降，但下降幅度不如在 ad-hoc 检索设置中那么显著。</p>
+<h2>6.2 Generalization Ability of LLM-R</h2>
+<p>我们从两个维度评估 LLM-R 的泛化能力。在第一个场景中，我们测试训练得到的检索器能否为训练期间未见过的任务检索出良好的上下文示例（in-context examples）。在第二个场景中，我们测试用一个大语言模型（LLM）训练得到的模型能否泛化到规模和质量各异的其他 LLM。</p>
+<p>在表 3 中，我们报告了 LLM-R 在四个留出任务（held-out tasks）上的性能。结果表明，LLM-R 以平均 5.4 分的优势超过次优模型 E5base，这表明它具备泛化到先前未见任务的能力。在当前的评估协议下，存在与留出任务属于相同任务类别的训练数据集（例如，QNLI 和 SNLI 都用于自然语言推断）。更具挑战性的设置是在互不重叠的任务类别上进行测试，我们将此留待未来工作。</p>
+<p>LLM-R 模型使用 LLaMA-7B 进行训练。为了评估其跨不同 LLM 的泛化能力，我们在另外三个模型上进行测试，即 GPT-Neo-2.7B (Black et al., 2021)、LLaMA-13B 和 GPT-35-Turbo。表 4 中的结果显示，对于参数规模从 2.7B</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>CQA</th><th>Comm.</th><th>Coref.</th><th>NLI</th><th>Para.</th><th>RC</th><th>Sent.</th><th>D2T</th><th>Summ.</th><th>Avg</th></tr></thead><tbody>
+<tr><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td><td>gpt-neo-2.7b</td></tr>
+<tr><td>BM25</td><td>41.1</td><td>67.0</td><td>53.2</td><td>47.6</td><td>64.5</td><td>51.2</td><td>78.3</td><td>45.4</td><td>47.3</td><td>54.4</td></tr>
+<tr><td>LLM-R</td><td>42.2</td><td>68.0</td><td>59.7</td><td>71.5</td><td>73.0</td><td>51.6</td><td>91.6</td><td>46.9</td><td>48.8</td><td>61.8 ↑ 7 . 4</td></tr>
+<tr><td>llama-13b</td><td>llama-13b</td><td>llama-13b</td><td>llama-13b</td><td>llama-13b</td><td>llama-13b</td><td>llama-13b</td><td>llama-13b</td><td>llama-13b</td><td>llama-13b</td><td>llama-13b</td></tr>
+<tr><td>BM25</td><td>49.6</td><td>80.1</td><td>61.1</td><td>67.0</td><td>69.9</td><td>60.5</td><td>92.5</td><td>49.9</td><td>50.9</td><td>64.6</td></tr>
+<tr><td>LLM-R</td><td>52.0</td><td>83.7</td><td>71.2</td><td>76.8</td><td>73.3</td><td>62.2</td><td>94.2</td><td>50.7</td><td>52.0</td><td>68.8 ↑ 4 . 2</td></tr>
+<tr><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td><td>gpt-35-turbo †</td></tr>
+<tr><td>BM25</td><td>75.3</td><td>85.2</td><td>65.0</td><td>78.1</td><td>78.0</td><td>84.4</td><td>95.7</td><td>51.9</td><td>52.8</td><td>74.7</td></tr>
+<tr><td>LLM-R</td><td>79.3</td><td>86.7</td><td>63.8</td><td>79.6</td><td>76.0</td><td>84.0</td><td>95.4</td><td>52.2</td><td>53.0</td><td>75.1 ↑ 0 . 4</td></tr>
+</tbody></table></div>
+<p>|                | CQA            | Comm.          | Coref.         | NLI            | Para.          | RC             | Sent.          | D2T            | Summ.          | Avg            |</p>
+<figcaption>Table 4: Generalization to LLMs that are not used for training. † : Since the official API of gpt-35-turbo does not return the log-probabilities, we use different input-output templates to formulate all tasks as text generation. Consequently, the scores of gpt-35-turbo cannot be directly compared with those of other LLMs. More details are in Appendix B.</figcaption>
+<figure><img src="assets/a130/figures/fig_3.png" alt="Figure 3: Performance gains of LLM-R over the random selection baseline. The selected knowledge-intensive tasks are NQ, ARC (easy and challenge), PIQA, HellaSwag, COPA, Paws, OpenBook QA, WSC273, WSC, Winogrande, and MultiRC." loading="lazy"></figure>
+<figcaption>Figure 3: Performance gains of LLM-R over the random selection baseline. The selected knowledge-intensive tasks are NQ, ARC (easy and challenge), PIQA, HellaSwag, COPA, Paws, OpenBook QA, WSC273, WSC, Winogrande, and MultiRC.</figcaption>
+<p>到数百亿不等的 LLM，LLM-R 均始终优于 BM25 基线。值得注意的是，对于小型语言模型，性能提升尤为显著，这可能是因为它们能力较弱，因此需要更高质量的示例才能进行上下文学习（in-context learning）。</p>
+<h2>6.3 When does LLM-R Work and When Does it Not?</h2>
+<p>为所有任务报告单一的聚合分数便于在不同模型变体之间进行比较。然而，这种做法掩盖了 LLM-R 在某些任务上的表现优于其他任务这一事实，并且在某些情况下甚至可能导致性能下降。在图 3 中，我们将任务划分为两组。如果解决某项任务需要常识、复杂推理或已记忆的事实性知识，则该任务被视为知识密集型任务。</p>
+<p>对于知识密集型集合中的任务，其绝对提升幅度远小于平均值，NQ 是唯一的例外。这并不令人意外，因为这些任务在很大程度上依赖于底层基础模型进行推理和知识记忆的能力。对于 NQ 数据集，我们通过实验发现训练集与测试集之间存在一定的重叠，即测试问题是某些训练问题的改写。尽管如此，我们仍决定在评估中保留 NQ 数据集，因为它是一个被广泛使用的基准测试（benchmark），且其余不重叠的问题仍然具有价值。</p>
+<p>另一个值得注意的案例是 SQuAD v1 数据集（Rajpurkar et al., 2016），在该数据集上 LLM-R 的表现差于随机选择基线。经过人工检查，我们发现 SQuAD 中的许多问题共享同一段落作为上下文。这经常导致 LLM-R 检索到的示例多样性有限，这或许可以解释所观察到的性能下降。</p>
+<p>在表 5 中，对于 Sentiment140 和 MNLI 数据集，我们的模型通过检索与测试示例具有相似输入模式的示例来提供帮助。相比之下，PIQA 数据集需要常识知识，可能无法从检索到的示例中获得太多收益。</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th></tr></thead><tbody>
+<tr><td>Task name</td><td>Sentiment140</td></tr>
+<tr><td>Test Input</td><td>Math review. Im going to fail the exam. What is the sentiment of this tweet?</td></tr>
+<tr><td>Test Answer</td><td>Negative</td></tr>
+<tr><td>LLM-R</td><td>revising for maths exam on tuesday which im gonna fail badly What is the sentiment of this tweet? Negative</td></tr>
+<tr><td>Task name</td><td>MNLI-m</td></tr>
+<tr><td>Test Input</td><td>Premise: &quot;Part 2), Confidentiality of Alcohol and Drug Abuse Patient Records.&quot; Hypothesis: &quot;Drug and alcohol patient records should be confidential&quot; Does the premise entail the hypothesis? Yes, No, or Maybe?</td></tr>
+<tr><td>Test Answer</td><td>Yes</td></tr>
+<tr><td>LLM-R</td><td>Premise: &quot;Eligible Clients unable to attain needed legal assistance&quot; Hypothesis: &quot;Clients that should have received legal assistance but didn&#x27;t&quot; Does the premise entail the hypothesis? Yes, No, or Maybe? Yes</td></tr>
+<tr><td>Task name</td><td>PIQA</td></tr>
+<tr><td>Test Input</td><td>Here is a goal: &quot;How can I keep a bathroom mirror from fogging up?&quot; How would you accomplish this goal?</td></tr>
+<tr><td>Test Answer</td><td>Wipe down with shaving cream.</td></tr>
+<tr><td>LLM-R</td><td>Here is a goal: &quot;how do you &#x27;clean up&#x27; an eyebrow you&#x27;ve filled in?&quot; How would you accomplish this goal? use concealer to cover up any mistakes made.</td></tr>
+</tbody></table></div>
+<p>| 0           | 1                                                                                                                                                                                                               |</p>
+<figcaption>Table 5: Retrieved examples by LLM-R. The bold texts are the groundtruth answers for the test inputs and retrieved candidates. More examples are available in Table 11.</figcaption>
+<h2>6.4 Using Different LLMs for Data Generation and Task Evaluation</h2>
+<div class="tablewrap"><table><thead><tr><th>Rank LLM → Eval LLM ↓</th><th>GPT-Neo-2.7B</th><th>LLaMA-7B</th><th>Both</th></tr></thead><tbody>
+<tr><td>GPT-Neo-2.7B</td><td>61.7</td><td>61.3</td><td>61.6</td></tr>
+<tr><td>LLaMA-7B</td><td>66</td><td>65.7</td><td>66.3</td></tr>
+</tbody></table></div>
+<p>| Rank LLM → Eval LLM ↓   |   GPT-Neo-2.7B |   LLaMA-7B |   Both |</p>
+<figcaption>Table 6: On the impacts of using different LLMs for candidate ranking and task evaluation. The &#x27;Both&#x27; setting merges the training data from two LLMs.</figcaption>
+<p>我们框架的一个关键方面是选择用于训练数据生成和任务评估的 LLM。在训练阶段，LLM 在对检索到的候选示例进行排序以及为奖励模型提供监督信号方面发挥着关键作用。在任务评估阶段，LLM 被用于生成最终预测。</p>
+<p>我们使用 GPT-Neo-2.7B 和 LLaMA-7B 进行实验。表 6 展示了训练和评估采用不同 LLM 组合时的结果。我们观察到，评估 LLM 的质量是决定最终性能的主要因素，而排序 LLM 的选择影响相对较小。尽管合并来自两个 LLM 的训练数据能带来最佳的整体性能，但为了简便起见，我们在主要实验中并未采用这一技术。</p>
+<h2>6.5 Scaling the Number of In-Context Examples and Retriever Size</h2>
+<p>在图 4 中，我们从两个方面考察 LLM-R 的缩放效应：上下文示例的数量和检索器模型的规模。随着检索示例数量的增加，整体性能有所提升，但在 4 个示例之后增益逐渐减小。包含更多示例通常会导致更长的提示和更高的推理成本。</p>
+<figure><img src="assets/a130/figures/fig_4.png" alt="Figure 4: The scaling effect with respect to the number of in-context examples and retriever size. Our main experiments use 8 in-context examples and base-size retriever. We vary the retriever model size by initializing with the released E5-{small, base, large} checkpoints from Wang et al.." loading="lazy"></figure>
+<figcaption>Figure 4: The scaling effect with respect to the number of in-context examples and retriever size. Our main experiments use 8 in-context examples and base-size retriever. We vary the retriever model size by initializing with the released E5-{small, base, large} checkpoints from Wang et al..</figcaption>
+<p>关于检索器规模，我们观察到小规模模型取得了与基础规模模型相当的结果，而大规模检索器则表现出更为显著的性能提升。这一趋势在所考察的两种语言模型上均保持一致。实践者可以根据性能与计算成本之间的权衡来选择合适的配置。</p>
+<h2>7 Conclusion</h2>
+<p>在本文中，我们提出了一种名为 LLM-R 的迭代训练框架，用于为大语言模型（LLM）检索高质量的上下文示例（in-context examples）。该框架利用冻结的 LLM 对检索到的头部候选进行排序以生成训练数据，然后学习一个基于交叉编码器（cross-encoder）的奖励模型来捕捉排序偏好。基于双编码器（biencoder）的稠密检索器则经过训练以从奖励模型中蒸馏知识。我们在多样化的任务集合上对 LLM-R 进行了全面评估，结果表明其始终优于各种强基线方法。我们的模型对留出任务（held-out tasks）以及不同规模的 LLM 也具有良好的泛化能力。</p>
+<h2>Limitations</h2>
+<p>在我们的框架中，我们将每个候选示例独立对待，并为每个测试示例检索 topk 个结果。这种做法可能并非最优，因为上下文示例（in-context examples）之间可能相互影响。引入组合优化与序贯决策领域的技术，是一个值得探索的有前景的方向。</p>
+<p>我们研究的另一个局限性与自动评估协议有关。为了比较不同方法的性能，我们报告所有任务上各指标的算术平均值。然而，这可能会使生成任务处于不利地位，因为与分类准确率相比，ROUGE 和 BLEU 等指标的取值变化范围通常更窄。此外，简单的算术平均并未考虑每个数据集的质量。</p>
+<h2>A Implementation Details</h2>
+<div class="tablewrap"><table><thead><tr><th></th><th>Retriever</th><th>Reward Model</th></tr></thead><tbody>
+<tr><td>initialization</td><td>E5 base</td><td>ELECTRA base</td></tr>
+<tr><td>learning rate</td><td>3 × 10 - 5</td><td>10 - 5</td></tr>
+<tr><td># of GPUs</td><td>8</td><td>8</td></tr>
+<tr><td>batch size</td><td>256</td><td>128</td></tr>
+<tr><td>train steps</td><td>6k</td><td>3k</td></tr>
+<tr><td>τ</td><td>0.01</td><td>n.a.</td></tr>
+<tr><td>α</td><td>0.2</td><td>n.a.</td></tr>
+<tr><td>positive examples</td><td>top 3</td><td>bottom 16</td></tr>
+<tr><td>negative examples</td><td>top 3</td><td>bottom 16</td></tr>
+<tr><td># of negatives</td><td>3</td><td>7</td></tr>
+<tr><td>ranking depth</td><td>100</td><td>100</td></tr>
+<tr><td>input length</td><td>256</td><td>384</td></tr>
+</tbody></table></div>
+<p>|                   | Retriever   | Reward Model   |</p>
+<figcaption>Table 7: Hyperparameters for training the bi-encoder retriever and reward model. We use the same hyperparameters for every iteration.</figcaption>
+<div class="tablewrap"><table><thead><tr><th>Dataset name</th><th>Category</th><th># train</th><th># test</th><th>Metric</th><th>Held-out?</th></tr></thead><tbody>
+<tr><td>AESLC (Zhang and Tetreault, 2019)</td><td>Summarize</td><td>13,181</td><td>1,750</td><td>ROUGE-L</td><td>N</td></tr>
+<tr><td>AGNews (Zhang et al., 2015)</td><td>Summarize</td><td>120,000</td><td>7,600</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>ARC Challenge (Bhakthavatsalam et al., 2021)</td><td>Close QA</td><td>1,117</td><td>1,165</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>ARC Easy (Bhakthavatsalam et al., 2021)</td><td>Close QA</td><td>2,241</td><td>2,365</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>BoolQ (Clark et al., 2019)</td><td>Reading Comp.</td><td>9,427</td><td>3,270</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>CommonGen (Lin et al., 2020)</td><td>Data-to-text</td><td>67,389</td><td>4,018</td><td>ROUGE-L</td><td>N</td></tr>
+<tr><td>COPA (Roemmele et al., 2011)</td><td>Commonsense</td><td>400</td><td>100</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>DART (Nan et al., 2021)</td><td>Data-to-text</td><td>62,659</td><td>2,768</td><td>ROUGE-L</td><td>N</td></tr>
+<tr><td>E2E NLG (Dušek et al., 2019)</td><td>Data-to-text</td><td>33,525</td><td>1,847</td><td>ROUGE-L</td><td>N</td></tr>
+<tr><td>Gigaword (Napoles et al., 2012)</td><td>Summarize</td><td>2,044,465</td><td>730</td><td>ROUGE-L</td><td>N</td></tr>
+<tr><td>HellaSwag (Zellers et al., 2019)</td><td>Commonsense</td><td>39,905</td><td>10,042</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>MNLI (m) (Williams et al., 2018)</td><td>NLI</td><td>392,702</td><td>9,815</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>MNLI (mm) (Williams et al., 2018)</td><td>NLI</td><td>392,702</td><td>9,832</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>MRPC (Dolan and Brockett, 2005)</td><td>Paraphrase</td><td>3,668</td><td>408</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>MultiRC (Khashabi et al., 2018)</td><td>Reading Comp.</td><td>27,243</td><td>4,848</td><td>F1</td><td>N</td></tr>
+<tr><td>NQ (Kwiatkowski et al., 2019)</td><td>Close QA</td><td>87,925</td><td>3,610</td><td>Exact Match</td><td>N</td></tr>
+<tr><td>OpenBook QA (Mihaylov et al., 2018)</td><td>Reading Comp.</td><td>4,957</td><td>500</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>PAWS (Zhang et al., 2019)</td><td>Paraphrase</td><td>49,401</td><td>8,000</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>PIQA (Bisk et al., 2020)</td><td>Commonsense</td><td>16,113</td><td>1,838</td><td>Accuracy</td><td>Y</td></tr>
+<tr><td>QNLI (Rajpurkar et al., 2018)</td><td>NLI</td><td>104,743</td><td>5,463</td><td>Accuracy</td><td>Y</td></tr>
+<tr><td>QQP (Wang et al., 2019)</td><td>Paraphrase</td><td>363,846</td><td>40,430</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>RTE (Bentivogli et al.)</td><td>NLI</td><td>2,490</td><td>277</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>Sentiment140 (Go et al., 2009)</td><td>Sentiment</td><td>1,600,000</td><td>359</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>SNLI (Bowman et al., 2015)</td><td>NLI</td><td>549,367</td><td>9,824</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>SQuAD v1 (Rajpurkar et al., 2016)</td><td>Reading Comp.</td><td>87,599</td><td>10,570</td><td>Exact Match</td><td>N</td></tr>
+<tr><td>SST2 (Socher et al., 2013)</td><td>Sentiment</td><td>67,349</td><td>872</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>Winogrande (Sakaguchi et al., 2020)</td><td>Coreference</td><td>40,398</td><td>1,267</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>WSC (Levesque et al., 2012)</td><td>Coreference</td><td>554</td><td>104</td><td>Accuracy</td><td>N</td></tr>
+<tr><td>WSC273 (Levesque et al., 2012)</td><td>Coreference</td><td>0</td><td>273</td><td>Accuracy</td><td>Y</td></tr>
+<tr><td>Yelp (Zhang et al., 2015)</td><td>Sentiment</td><td>490,456</td><td>33,285</td><td>Accuracy</td><td>Y</td></tr>
+<tr><td>Total</td><td>n.a.</td><td>6.3M</td><td>177k</td><td>n.a.</td><td>n.a.</td></tr>
+<tr><td>Total (sampled)</td><td>n.a.</td><td>591k</td><td>123k</td><td>n.a.</td><td>n.a.</td></tr>
+</tbody></table></div>
+<p>| Dataset name                                 | Category      | # train   | # test   | Metric      | Held-out?   |</p>
+<figcaption>Table 8: Statistics for the datasets used in this paper.</figcaption>
+<p>检索器模型和奖励模型的超参数汇总于表 7 中。E5base 检查点可在 https://huggingface.co/intfloat/e5-base-v2 获取。该检查点也被用于 k-means 聚类基线，其中我们选取距离每个聚类中心最近的 8 个示例作为上下文示例（in-context examples）。在每次迭代中，我们使用 LLaMA-7B 对检索到的前 100 个候选进行排序。由于我们是从一个统一的示例池中进行检索，某个候选有可能来自与查询不同的任务。在这种情况下，我们会为其分配一个较低的分数。</p>
+<p>在评估过程中，我们检索前 8 个候选并将其用作上下文示例。LLaMA-7B 的最大输入长度设置为 1024。更长的输入会从左侧被截断。最大输出长度设置为 64。我们流程中最耗时的部分是使用 LLaMA-7B 对候选进行排序，对于 200k 个示例，使用 8 块 V100</p>
+<p>GPU 大约需要 12 小时。训练检索器模型和奖励模型总共耗时不到 10 小时。</p>
+<h2>B Evaluation with GPT-35-Turbo</h2>
+<p>由于配额限制，我们为每个数据集最多采样 1k 个示例。由于 GPT-35-Turbo 不返回词元级别的对数概率，我们无法通过计算每个选项的对数似然来评估多选题数据集。因此，我们将所有选项附加到输入的末尾，让模型生成选项的索引。表 9 中展示了一个示例。我们也尝试将这种格式用于 LLaMA-7B，但其性能显著差于比较每个选项对数似然的方法。</p>
+<p>对于少量测试示例，GPT-35-Turbo 未能遵循上下文示例的模式，生成了并非有效类别标签的输出。我们添加了一些基于字符串匹配的简单启发式规则来确定模型的预测。</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th></tr></thead><tbody>
+<tr><td>Input</td><td>What happens next in this paragraph? How to survive remedial classes Look at the course as an opportunity. Many students are discouraged when they are assigned to a remedial class. Some assume this placement means they aren&#x27;t ready for college. OPTIONS: A) However, people who are not unable to do what they&#x27;re given on campus, or those who are cut out from college academies, are likely to have some little snitches. You want to be prepared for a negative outcome if possible. B) In this case, you should consider what you will do if your subject consists of a certain term or number of subject areas. You could set up a study study program yourself or tutor a student who is struggling to thoroughly comprehend where they sat for homework. C) If you take the course, you might find you feel highly motivated after passing the test. Try to develop a positive attitude towards the course so that you are not discouraged when you take your homework at the end of the day. D) However, being assigned a remedial class doesn&#x27;t mean that you are behind, just that you have an opportunity to receive better instruction and improve your skills in a subject that you have struggled with in the past. There is nothing unusual about being asked to attend a remedial course: two thirds of community college students take at least one remedial course.</td></tr>
+<tr><td>Output</td><td></td></tr>
+<tr><td></td><td>D</td></tr>
+</tbody></table></div>
+<p>| 0      | 1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |</p>
+<p>表 9：GPT-35-Turbo 的输入-输出格式。该示例来自 HellaSwag 数据集。为便于阅读，我们添加了一些换行符。</p>
+<div class="tablewrap"><table><thead><tr><th>Task.Task</th><th>Zero-shot.Zero-shot</th><th>Random.Random</th><th>Kmeans.Kmeans</th><th>BM25.BM25</th><th>E5 base.E5 base</th><th>SBERT.SBERT</th><th>EPR.EPR</th><th>LLM-R.1 iter</th><th>LLM-R.2 iter</th><th>LLM-R.3 iter</th></tr></thead><tbody>
+<tr><td>AESLC</td><td>5.8</td><td>19.4</td><td>19</td><td>26.8</td><td>27</td><td>25.3</td><td>26</td><td>26.7</td><td>27.3</td><td>27.1</td></tr>
+<tr><td>AGNews</td><td>31.5</td><td>67.4</td><td>71.9</td><td>90.6</td><td>90.6</td><td>90.2</td><td>91.8</td><td>92.4</td><td>93.5</td><td>93.5</td></tr>
+<tr><td>ARC Chall.</td><td>35.6</td><td>39.7</td><td>40.5</td><td>40.3</td><td>44.6</td><td>42.8</td><td>43</td><td>43.4</td><td>43.6</td><td>44</td></tr>
+<tr><td>ARC Easy</td><td>51</td><td>60</td><td>61.8</td><td>59.9</td><td>63</td><td>63.1</td><td>63.1</td><td>63.6</td><td>63.3</td><td>63.6</td></tr>
+<tr><td>BoolQ</td><td>64.7</td><td>70</td><td>69</td><td>74.7</td><td>72.4</td><td>73.9</td><td>74.8</td><td>75.6</td><td>75.1</td><td>74.1</td></tr>
+<tr><td>CommonGen</td><td>19.2</td><td>36.3</td><td>34.4</td><td>37.6</td><td>37.4</td><td>37.6</td><td>39.2</td><td>38.2</td><td>37.7</td><td>37.3</td></tr>
+<tr><td>COPA</td><td>66</td><td>80</td><td>85</td><td>78</td><td>83</td><td>82</td><td>82</td><td>84</td><td>84</td><td>84</td></tr>
+<tr><td>DART</td><td>22.9</td><td>52</td><td>46.6</td><td>55.9</td><td>54.7</td><td>54.4</td><td>56.2</td><td>57.3</td><td>57.2</td><td>57.3</td></tr>
+<tr><td>E2E NLG</td><td>34.6</td><td>52.7</td><td>46.4</td><td>54.5</td><td>51.8</td><td>50.2</td><td>53.6</td><td>54.9</td><td>54.7</td><td>54.9</td></tr>
+<tr><td>Gigaword</td><td>15.3</td><td>30</td><td>30.7</td><td>32.7</td><td>32.5</td><td>32.6</td><td>32.4</td><td>33.3</td><td>32.5</td><td>31.8</td></tr>
+<tr><td>HellaSwag</td><td>71.5</td><td>73.9</td><td>74</td><td>74.9</td><td>75.2</td><td>75.3</td><td>75.2</td><td>75.4</td><td>75.5</td><td>75.4</td></tr>
+<tr><td>MNLI (m)</td><td>35.8</td><td>46.3</td><td>44.2</td><td>50.1</td><td>44.5</td><td>50.8</td><td>59.9</td><td>68.2</td><td>70.2</td><td>69.8</td></tr>
+<tr><td>MNLI (mm)</td><td>35.6</td><td>48.1</td><td>45.4</td><td>48.3</td><td>44.7</td><td>49.3</td><td>61.5</td><td>69.5</td><td>72</td><td>71.3</td></tr>
+<tr><td>MRPC</td><td>69.1</td><td>49.5</td><td>38</td><td>61.8</td><td>41.2</td><td>52.7</td><td>55.9</td><td>62.3</td><td>75.3</td><td>78.2</td></tr>
+<tr><td>MultiRC</td><td>57</td><td>48.5</td><td>34.1</td><td>54.2</td><td>56</td><td>55.3</td><td>50.4</td><td>52.9</td><td>51.5</td><td>52.1</td></tr>
+<tr><td>NQ</td><td>0.3</td><td>21.5</td><td>22.6</td><td>37.6</td><td>39.3</td><td>39.4</td><td>39.2</td><td>39.4</td><td>39.1</td><td>39.2</td></tr>
+<tr><td>OpenBook QA</td><td>41.6</td><td>49.8</td><td>49</td><td>49.6</td><td>51.4</td><td>51.4</td><td>49.6</td><td>50.8</td><td>52.2</td><td>53.4</td></tr>
+<tr><td>PAWS</td><td>53.2</td><td>57</td><td>56.6</td><td>56.6</td><td>55.4</td><td>58.2</td><td>57.7</td><td>57</td><td>56.6</td><td>57</td></tr>
+<tr><td>PIQA</td><td>77</td><td>79.1</td><td>79.4</td><td>81.3</td><td>81.3</td><td>80.7</td><td>80.5</td><td>80.9</td><td>81.6</td><td>80.6</td></tr>
+<tr><td>QNLI</td><td>49.2</td><td>56.4</td><td>53.4</td><td>62.2</td><td>61.5</td><td>61.9</td><td>65</td><td>74.4</td><td>69.6</td><td>69.4</td></tr>
+<tr><td>QQP</td><td>57.7</td><td>63.4</td><td>63.3</td><td>79.8</td><td>77.5</td><td>81.3</td><td>81.7</td><td>80.1</td><td>82.6</td><td>83.3</td></tr>
+<tr><td>RTE</td><td>59.6</td><td>59.9</td><td>58.5</td><td>65.7</td><td>63.9</td><td>67.2</td><td>66.8</td><td>67.2</td><td>68.6</td><td>70.4</td></tr>
+<tr><td>Sentiment140</td><td>49.3</td><td>88.6</td><td>89.4</td><td>90.8</td><td>93.9</td><td>92.2</td><td>91.4</td><td>90.8</td><td>91.1</td><td>90.3</td></tr>
+<tr><td>SNLI</td><td>39.8</td><td>43.7</td><td>52.5</td><td>47.1</td><td>53.5</td><td>58.4</td><td>68.4</td><td>80.2</td><td>82</td><td>82.2</td></tr>
+<tr><td>SQuAD v1</td><td>2.1</td><td>64.1</td><td>62.3</td><td>61.2</td><td>60.8</td><td>61.6</td><td>64.3</td><td>60.7</td><td>57.3</td><td>52.5</td></tr>
+<tr><td>SST2</td><td>54.4</td><td>85.9</td><td>89.7</td><td>84.4</td><td>92.1</td><td>87.6</td><td>88.7</td><td>94</td><td>93.8</td><td>93.1</td></tr>
+<tr><td>Winogrande</td><td>62</td><td>66.7</td><td>66.5</td><td>67.5</td><td>66.9</td><td>66.5</td><td>66.5</td><td>67.9</td><td>68.1</td><td>67.2</td></tr>
+<tr><td>WSC</td><td>64.4</td><td>60.6</td><td>56.7</td><td>56.7</td><td>61.5</td><td>63.5</td><td>61.5</td><td>60.6</td><td>63.5</td><td>66.4</td></tr>
+<tr><td>WSC273</td><td>74</td><td>74.4</td><td>74.7</td><td>64.5</td><td>65.2</td><td>62.6</td><td>65.2</td><td>74.4</td><td>79.5</td><td>78.8</td></tr>
+<tr><td>Yelp</td><td>47.9</td><td>92</td><td>93.5</td><td>93.5</td><td>97.3</td><td>95.9</td><td>95.1</td><td>95.7</td><td>95.9</td><td>95.5</td></tr>
+<tr><td>Average</td><td>44.9</td><td>57.9</td><td>57</td><td>61.3</td><td>61.4</td><td>62.1</td><td>63.5</td><td>65.7</td><td>66.5</td><td>66.4</td></tr>
+</tbody></table></div>
+<p>| Task.Task    |   Zero-shot.Zero-shot |   Random.Random |   Kmeans.Kmeans |   BM25.BM25 |   E5 base.E5 base |   SBERT.SBERT |   EPR.EPR |   LLM-R.1 iter |   LLM-R.2 iter |   LLM-R.3 iter |</p>
+<figcaption>Table 10: Detailed results for each dataset.</figcaption>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th></tr></thead><tbody>
+<tr><td>Task Name</td><td>AG News &quot;Holiday</td></tr>
+<tr><td>Test Input</td><td>Shoppers Off to a Fast Start Holiday shoppers spent 10 percent more Friday than they did a year ago, according to early reports, but Wal-Mart Stores Inc. dampened hopes for a strong start to the key retail season by &quot; What is this text about? World, Sports, Business, or Technology?</td></tr>
+<tr><td>Test Answer</td><td>Business &quot;Disappointing holiday news hurts retail shares Shares in a range of area retailers dipped Monday on</td></tr>
+<tr><td>LLM-R Top 1</td><td>disappointing Thanksgiving sales data from Wal-Mart Stores Inc. In addition, ShopperTrak, which tallies sales results from 30,000 stores nationwide, said &quot; What is this text about? World, Sports, Business, or Technology? Business</td></tr>
+<tr><td>Task name</td><td>ARC Challenge</td></tr>
+<tr><td>Test Input</td><td>In the 17th century, to estimate the distance to other planets, scientists first used the technique of viewing the planet from two different locations on Earth&#x27;s surface. Which characteristic of the planet were the scientists using to calculate the distance from Earth?</td></tr>
+<tr><td>Test Answer</td><td>location</td></tr>
+<tr><td>LLM-R Top 1</td><td>Which physical characteristic of Earth is similar to a physical characteristic of the Moon? its mountain ranges</td></tr>
+<tr><td>Task name</td><td>ARC Easy</td></tr>
+<tr><td>Test Input</td><td>What is the major cause of seasonal changes?</td></tr>
+<tr><td>Test Answer</td><td>tilt of the Earth&#x27;s axis</td></tr>
+<tr><td>LLM-R Top 1</td><td>Which occurs as a result of Earth&#x27;s tilt on its rotating axis? seasonal changes in the climate</td></tr>
+<tr><td>Task name</td><td>CommonGen</td></tr>
+<tr><td>Test Input</td><td>Concepts: field, throw, kid, bunch, ball. Write a sentence that includes all these words.</td></tr>
+<tr><td>Test Answer</td><td>A bunch of kids are running around and throwing a ball on a field.</td></tr>
+<tr><td>LLM-R Top 1</td><td>Concepts: look, ball, lot. Write a sentence that includes all these words. Two babies look up while they are playing in a playpen with a lot of balls.</td></tr>
+<tr><td>Task name</td><td>COPA</td></tr>
+<tr><td>Test Input</td><td>&quot;The boy skipped dinner.&quot; What is the cause?</td></tr>
+<tr><td>Test Answer</td><td>He ate a big lunch. &quot;The parents left their children with a babysitter.&quot; What is the cause? They made plans to celebrate</td></tr>
+<tr><td>LLM-R Top 1</td><td>their anniversary.</td></tr>
+<tr><td>Task name</td><td>DART</td></tr>
+<tr><td>Test Input</td><td>Triple: The Mill, eatType, coffee shop; The Mill, food, Chinese; The Mill, priceRange, moderate; The Mill, area, city centre; The Mill, near, The Sorrento What is a sentence that describes this triple?</td></tr>
+<tr><td>Test Answer</td><td>There is a coffee shop serving Chinese food called The Mill. It has a moderate price range is is find in the city centre near The Sorrento. Triple: The Mill, eatType, coffee shop; The Mill, food, Indian; The Mill, priceRange, cheap; The Mill,</td></tr>
+<tr><td>LLM-R Top 1</td><td>area, riverside; The Mill, near, The Sorrento What is a sentence that describes this triple? The Mill coffee shop is located in the riverside area near The Sorrento. They serve Indian food at a cheap price. Gigaword</td></tr>
+<tr><td>Task name Test Input</td><td>Write a short summary for this text: the dollar and major european currencies traded within narrow ranges on tuesday on the london forex market , which was waiting for the easter holiday weekend and for us</td></tr>
+<tr><td>Test Answer</td><td>employment figures to be announced on friday , traders said in late afternoon . london forex market stable as market waits for easter us data Write a short summary for this text: the dollar was stable over-all early monday afternoon</td></tr>
+<tr><td>LLM-R Top 1</td><td>by comparison with morning levels on the london forex market , which was waiting for publication at the end of the week of us inflation figures , traders said . dollar stable in london as market waits for us inflation data</td></tr>
+<tr><td>Task name</td><td>MRPC Here are two sentences: An episode is declared when the ozone reaches .20 parts per million parts of air</td></tr>
+<tr><td>Test Input</td><td>for one hour . A Stage 1 episode is declared when ozone levels reach 0.20 parts per million . Do they have the same meaning?</td></tr>
+<tr><td>Test Answer</td><td>Yes Here are two sentences: A Stage One alert is declared when ozone readings exceed 0.20 parts per million</td></tr>
+<tr><td>LLM-R Top 1</td><td>during a one-hour period . A Stage 1 episode is declared when ozone levels reach 0.20 parts per million . Do they have the same meaning? Yes</td></tr>
+<tr><td>name</td><td></td></tr>
+<tr><td>Task</td><td>NQ</td></tr>
+<tr><td>Test Input</td><td>Question: legislation regarding data protection and security in uk? Answer:</td></tr>
+<tr><td>Test Answer</td><td>The Data Protection Act 1998</td></tr>
+<tr><td>LLM-R Top 1</td><td>Question: which law relates to the protection of personal information? Answer: Data Protection Act 1998</td></tr>
+</tbody></table></div>
+<p>| 0                    | 1                                                                                                                                                                                                                                                                                          |</p>
+<figcaption>Table 11: More retrieved examples. The format is the same as Table 5.</figcaption></div></div></body></html>

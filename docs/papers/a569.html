@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使用 Chain of Utterances 对 LLM 进行红队测试以实现安全对齐</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Red-Teaming Large Language Models using Chain of Utterances for Safety-Alignment</h1>
+<p class="lead">使用 Chain of Utterances 对 LLM 进行红队测试以实现安全对齐</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">思维链与推理</span><span class="chip">评测基准</span><span class="chip">可靠性与安全</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a569.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文针对 LLM 公开部署后可能对有害问题输出有害内容、而现有 CoT 式红队提示（如 &#x27;Let&#x27;s think step by step&#x27;）易被模型识别并高比例拒绝的问题，提出安全评测基准 RED-EVAL 与安全对齐流程 RED-INSTRUCT。RED-EVAL 的核心是 Chain of Utterances (CoU) 提示：在单条提示中构造 Red-LM（有害提问者）与 Base-LM（不安全但乐于助人的回答者）两个角色的对话演示，让被测模型补全 Base-LM 的回复，并以 internal thoughts 前缀显著降低拒绝率。实验显示该方法对 GPT-4、ChatGPT 的攻击成功率约 65%/73%，对 8 个开源模型超过 86%，明显优于 CoT 与 universal adversarial suffix 基线。作者进一步用 CoU 提示从 ChatGPT 采集 HARMFULQA 数据集（1.9K 有害问题、9.5K 安全 blue 对话与 7.3K 有害 red 对话），经 SAFE-ALIGN 两种策略微调 Vicuna-7B 得到 STARLING，在安全评测提升的同时基本保持 TruthfulQA/MMLU/BBH 效用。对团队而言，其红队提示模板与 GPT-4-as-judge 标注流程可直接用于评估自研 LLM 应用的安全可靠性与滥用防护能力。</p>
+<h2>问题</h2><p>LLM 在大规模公开部署时可能对有害问题生成有害输出，而现有安全评测方法（如基于 CoT 的红队提示）容易被模型识别，模型以高拒绝率规避回答，导致安全漏洞无法被系统性发现；同时缺少可用于安全对齐的有害/安全成对对话数据，使模型 guardrails 难以有效增强。</p>
+<h2>方法</h2><p>三部分：(1) RED-EVAL 评测基准——使用 Chain of Utterances (CoU) 越狱提示，在提示中预置 Red-LM 与 Base-LM 两个角色的多轮对话演示，把有害问题作为 Red-LM 的发言，要求被测模型按演示补全 Base-LM 的回复；Base-LM 回复前缀包含 internal thoughts，这是降低拒绝率的关键成分；用 GPT-4 作为 judge 标注回复是否有害（ASR/ASR2 指标）。(2) HARMFULQA 数据构建——通过 ChatGPT 多轮交互生成 10 主题×10 子主题，再为每个类别生成 20 个有害问题；对每个有害问题用 CoU 提示让 ChatGPT 角色扮演生成安全且有帮助的 blue 对话（每题重复 5 次采样），再用 RED-EVAL 越狱提示生成对应有害的 red 对话，共得 1,960 个有害问题、9,536 条 blue 与 7,356 条 red 对话。(3) SAFE-ALIGN 对齐——Strategy-A 在 blue 数据上对 Base-LM 回复 token 最小化负对数似然（Red-LM utterance 的 loss 置零）；Strategy-B 先对 red 数据做梯度上升惩罚（loss 超过 1.0 时回退为梯度下降以防表示崩溃），K=200 步后去掉 red 数据转回 Strategy-A 训练，并混入等量 ShareGPT 数据防止遗忘；最终得到基于 Vicuna-7B 的 STARLING 模型。</p>
+<h2>关键结果</h2><p> RED-EVAL 在 DANGEROUSQA 上对 GPT-4 和 ChatGPT 的攻击成功率（ASR）分别为 65% 和 73%，平均约 69%；在 HARMFULQA 1,960 题上闭源模型红队成功率超过 67%，而 CoT 与 STANDARD 提示几乎全部失败</p><p> 对 8 个开源模型（Vicuna-7B/13B、StableBeluga-7B/13B 等）RED-EVAL 的 ASR 超过 86%，比 CoT 基线（约 47%）提升 39%</p><p> internal thoughts 使 GPT-4 与 ChatGPT 的 ASR 分别提升 22% 和 6.5%（ASR2 分别提升 26.5% 和 6%）</p><p> 与 universal adversarial suffix 对比（388 个测试有害行为、GPT-4 判定）：universal attack 在 GPT-4/ChatGPT 上 ASR 仅 4.7%/29.5%，RED-EVAL 达 59.6%/75.5%</p><p> GPT-4 judge 与三位专家人工标注在 400 个随机样本上一致率超过 98%</p><p> STARLING (BLUE) 相比 Vicuna-7B 基线：抗红队攻击 +5.2%、HHH +2.3%、utility 基准 +0.55%</p><p> HHH 评测：Strategy-B 的 K 步 red 数据预训练使平均 HHH 提升 &gt;6%（harmlessness &gt;12%、helpfulness &gt;9%、honest 下降 5%）；去掉 red 数据的 STARLING (BLUE) 平均下降约 3%</p><p> 训练稳定性：red 数据使 200 步训练内 TruthfulQA 下降 0.5 分、MMLU 下降超过 1.5 分；仅用 blue 数据时 TruthfulQA 单调提升约 2%</p><p> 提示模板消融：去掉演示内的 instruction 后攻击成功率几乎降为零；改写模板内问题/回答会显著改变成功率（如 6/10 降至 4/10 或 2/10）</p>
+<h2>创新点</h2><p>相对已有工作的区别：(1) 相比 CoT 式红队提示（在有害问题后加 &#x27;Let&#x27;s think step by step&#x27;），CoU 通过双角色对话演示加 internal thoughts 前缀大幅提升越狱成功率，且对闭源 API（GPT-4/ChatGPT）同样有效；(2) 相比基于关键词匹配判定的 universal adversarial suffix 攻击，RED-EVAL 用 GPT-4 判定有害性且成功率显著更高；(3) 将红队提示复用为数据合成工具，构建 blue/red 成对对话数据用于安全对齐，并报告了对有害样本做梯度上升导致的训练不稳定问题（模型生成能力崩溃、MMLU 下降）及缓解方案（loss 超过 1.0 时回退梯度下降、限制 K=200 步、混入 ShareGPT 数据）。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程 | 3.5 评测与可靠使用</p><p><b>理由：</b>直接命中两个能力域：3.5 评测与可靠使用明确覆盖&#x27;可靠性/安全性/滥用防护&#x27;与评测基准方法，本文的 RED-EVAL 红队方法、ASR 指标体系与 GPT-4-as-judge 标注流程（论文验证与人工 &gt;98% 一致）可直接迁移到团队对自研 LLM 应用（知识库问答、代码助手等）上线前的安全评测；3.2 提示工程方面，CoU 是一种被实证高效的结构化提示模式（双角色对话演示 + internal thoughts 前缀），论文还系统消融了模板内问题措辞、回答演示、instruction 缺失对效果的影响，指出&#x27;有效提示需要人工干预与多轮模板调优&#x27;，对团队提示设计与对抗性测试有直接借鉴价值。需注意：CoU 中的&#x27;两个 Agent&#x27;是单条提示内的角色扮演文本补全，并非真正的多 Agent 编排系统，故不匹配 3.4；SAFE-ALIGN 微调部分涉及模型训练，超出团队&#x27;不训练模型&#x27;的定位，仅作方法了解。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

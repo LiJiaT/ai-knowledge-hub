@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>面向 LLM 的上下文忠实提示（Context-faithful Prompting）</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Context-faithful Prompting for Large Language Models</h1>
+<p class="lead">面向 LLM 的上下文忠实提示（Context-faithful Prompting）</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">自动提示优化</span><span class="chip">RAG与检索</span><span class="chip">评测基准</span><span class="chip">可靠性与安全</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a439.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>LLM 在 RAG 式上下文增强任务中常被参数化记忆带偏：上下文与预训练知识冲突时返回记忆中的旧答案，上下文不含答案时也不肯弃答。论文提出两种免微调的提示策略：opinion-based prompts 把上下文改写为叙述者（Bob）的陈述、将事实性问题转为询问其观点的问题；counterfactual demonstrations 用含错误事实的样本（经 KATE 检索）做 few-shot 示例，并配合 APE 自动生成的指令提示。在 MRC 与关系抽取三个数据集上，OPIN+INSTR 组合将 text-davinci-003 在 natural questions 上的 memorization ratio 从 35.2% 降至 3.0%，RealTime QA 的 NoAns 弃答准确率最高提升 57.2%，Brier score 同步下降。论文还发现原始（事实性）示例反而可能损害忠实性，且模型越大记忆倾向越强。这些结论可直接指导团队 RAG 问答的提示模板设计与上下文忠实性评测。</p>
+<h2>问题</h2><p>LLM 过度依赖参数化知识，在上下文特定的知识获取任务（机器阅读理解 MRC、关系抽取 RE）中会忽略给定上下文：当上下文事实与预训练知识冲突（knowledge conflict）时，返回记忆中的全局事实而非上下文中局部描述的事实；当上下文不包含答案信息时无法弃答（prediction with abstention），给出基于记忆的猜测。这两个问题直接影响 LLM 在上下文增强（如检索增强）场景中的可靠性。</p>
+<h2>方法</h2><p>纯提示层面、免微调的方案。核心技术：(1) opinion-based prompts——将上下文改写为叙述者（Bob）的陈述，把事实性问题改写为询问叙述者观点的问题，利用&#x27;观点因人而异、必须依据陈述作答&#x27;的认知先验迫使模型关注上下文，并促进无答案时的选择性弃答；(2) counterfactual demonstrations——用含错误事实的反事实样本作为 few-shot 示例，通过 KATE（RoBERTa-nli+sts-b 编码、余弦相似度）检索最相关示例。另比较 attributed prompt（问题后加 &#x27;based on the given text&#x27;）与 instruction-based prompt（用 APE 自动生成并按 dev 集筛选指令），OPIN+INSTR 组合效果最佳。</p>
+<h2>关键结果</h2><p> text-davinci-003 在 natural questions 上的 memorization ratio 从 35.2% 降至 3.0%</p><p> 相比 zero-shot base prompt，OPIN+INSTR 配合反事实示例在 GPT-3.5 上使 MRC 的 MR 降低 32.2%、RE 降低 10.9%；在 LLaMA-2-7B-chat 上 MRC 降低 39.4%、RE 降低 57.3%</p><p> RealTime QA 上 OPIN+INSTR 在 GPT-3.5 的 NoAns 子集准确率比 base prompt 高 57.2%（zero-shot）与 16.3%（few-shot），LLaMA-2 上高 22.4%；Brier score 在 GPT-3.5 上分别降低 24.2% 与 7.8%，LLaMA-2 上降低 2.6% 与 1.9%</p><p> 使用原始（事实性）实例做演示效果有限、甚至损害 MRC 忠实性；反事实示例带来进一步提升</p><p> 更大模型更善于依据上下文更新记忆答案，但在完整（未过滤）评测集上记忆更严重</p><p> 在无知识冲突的原始数据集上，所提方法不损害性能（opinion-based prompts 结果相当或更好）</p>
+<h2>创新点</h2><p>先前工作多用微调（在反事实上下文上 finetune、answerability augmentation）或置信度校准（需白盒访问模型）来提升上下文利用与弃答能力；本文证明仅靠提示设计（opinion-based prompts + counterfactual demonstrations）即可免训练、免白盒地显著提升上下文忠实性，更通用且成本更低。此外给出与直觉相反的发现：在知识冲突场景，反事实示例优于事实性示例，后者有时甚至不如 zero-shot 推理。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.2 提示工程 | 3.5 评测与可靠使用</p><p><b>理由：</b>论文研究的正是团队核心场景：在上下文增强（RAG 式）的 LLM 应用中，如何让模型忠实于给定上下文而非参数化记忆，以及上下文不含答案时如何可靠弃答。opinion-based prompts、attributed/instruction-based prompts（含 APE 自动指令生成）与反事实示例直接命中 3.2 提示工程的核心技术；知识冲突与弃答的评测方法（memorization ratio、Brier score、反事实测试集构造）命中 3.5 的评测与可靠使用；上下文增强提示的可靠性问题命中 3.1。全部方法免微调、只改提示，与团队&#x27;用好模型而非训练模型&#x27;的定位完全一致。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p><h2>证据核查</h2><p class='muted'>2 条证据未在原文中核对到</p></div></div></body></html>

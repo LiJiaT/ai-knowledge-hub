@@ -1,0 +1,318 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adaptive-RAG：通过问题复杂度学习自适应调整检索增强大语言模型</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Adaptive-RAG: Learning to Adapt Retrieval-Augmented Large Language Models through Question Complexity</h1>
+<p class="lead">Adaptive-RAG：通过问题复杂度学习自适应调整检索增强大语言模型</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">RAG与检索</span><span class="chip">成本与效率</span><span class="chip">评测基准</span><span class="chip">思维链与推理</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a108.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文针对 RAG 系统一刀切策略的问题：多步迭代检索处理简单查询会带来不必要的计算开销，而单步或无检索策略又无法应对需要多文档聚合推理的复杂多跳查询，真实场景中用户查询复杂度差异很大。方法上提出 Adaptive-RAG 框架，训练一个小型 LM（T5-Large）作为复杂度分类器，将查询分为三档（无需检索/单步检索/多步迭代检索）并路由到对应策略，不改动底层 LLM 与检索器；分类器标签全自动构建，一部分来自三种策略的实际预测结果（谁答对标谁、平局优先简单策略），一部分利用数据集固有的单跳/多跳归纳偏置。在 6 个开放域 QA 数据集与 FLAN-T5、GPT-3.5 上验证，整体准确率与效率均优于 Adaptive Retrieval、Self-RAG 等自适应基线，且比全程多步迭代显著省时。对团队而言，这是知识库问答场景中&#x27;按查询复杂度动态路由检索策略&#x27;的直接参考，可同时优化回答质量与调用成本。</p>
+<h2>问题</h2><p>现有检索增强 LLM 采用 one-size-fits-all 策略：多步迭代方法对简单查询造成不必要的计算开销，单步检索或无检索方法又不足以处理需要连接和聚合多个文档的复杂多跳查询；而真实场景中并非所有用户请求都是复杂查询，需要根据查询复杂度动态选择最合适的处理策略。</p>
+<h2>方法</h2><p>提出 Adaptive-RAG 框架：先用一个较小的 LM（T5-Large）训练三分类器，预测查询复杂度（&#x27;A&#x27;=可直接由 LLM(q) 回答、&#x27;B&#x27;=需单步检索 LLM(q,d)、&#x27;C&#x27;=需多步迭代检索 LLM(q,d,c)），再据此路由到对应策略，LLM 与 Retriever 本身保持不变、可使用任意 off-the-shelf 模型。分类器训练标签自动收集：优先用三种策略的实际预测结果标注（最简单的无检索策略答对则标 &#x27;A&#x27;，平局时优先赋予更简单模型），对仍未标注的样本利用数据集归纳偏置补标（单跳数据集标 &#x27;B&#x27;、多跳数据集标 &#x27;C&#x27;），用交叉熵损失训练。多步策略采用 IRCoT 式的 Chain-of-Thought 推理与检索交替迭代。</p>
+<h2>关键结果</h2><p> 在 6 个开放域 QA 数据集（单跳：SQuAD v1.1、Natural Questions、TriviaQA；多跳：MuSiQue、HotpotQA、2WikiMultiHopQA）上，Adaptive-RAG 在 FLAN-T5-XL (3B)、FLAN-T5-XXL (11B) 与 GPT-3.5 上整体准确率（F1/EM/Acc）优于 Adaptive Retrieval 与 Self-RAG 等自适应基线，同时比全程多步迭代策略在所有模型规模上均显著更高效（每数据集评测 500 样本，检索器统一为 BM25）</p><p> 分类器混淆矩阵显示：&#x27;C (Multi)&#x27; 被误判为 &#x27;B (One)&#x27; 约 31%，&#x27;B (One)&#x27; 被误判为 &#x27;C (Multi)&#x27; 约 23%，&#x27;A (No)&#x27; 被误判为 &#x27;B (One)&#x27; 约 47%、被误判为 &#x27;C (Multi)&#x27; 约 22%</p><p> 使用 Oracle 分类器（分类完全正确）时 Adaptive-RAG 取得最佳性能且比实际分类器版本更高效，说明分类器效果仍有提升空间</p><p> 分类器规模消融（Table 6）显示不同大小的分类器之间无显著性能差异，可在真实使用中以更小分类器实现资源节约而不牺牲性能</p><p> 训练数据消融（Table 4）显示同时使用&#x27;模型预测结果 silver 数据&#x27;与&#x27;数据集归纳偏置&#x27;两种自动标注策略，优于仅用其中一种；仅用 silver 数据虽分类准确率高但 QA 性能非最优，因其未覆盖预测错误的查询</p>
+<h2>创新点</h2><p>与已有自适应检索工作的区别：Mallen 等人仅基于查询实体频率做&#x27;是否检索&#x27;的二元决策，无法处理需要多步推理的复杂查询；Self-RAG 需要训练专门模型；IRCoT 等多步方法对所有查询统一迭代访问 LLM 与检索器。Adaptive-RAG 用独立的小型分类器预先判定查询复杂度，在无检索、单步、多步三种现成策略间路由，可套用任意 off-the-shelf LLM 与检索器，无需改变内部模型架构或参数，且训练标签完全自动收集、无需人工标注。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.5 评测与可靠使用</p><p><b>理由：</b>团队核心场景包含知识库问答，本文直接命中 3.1 的 RAG/检索增强与上下文组织：其核心是在&#x27;检索多少上下文、迭代几轮&#x27;之间按查询动态决策。同时论文将每查询耗时、检索-生成步数等效率指标与 F1/EM/Acc 并重评测，并系统分析准确率-效率权衡，直接命中 3.5 的成本与效率优化与评测方法。分类器路由思路对 Agent 的策略/工具选择也有借鉴意义，但论文本身不涉及多智能体协作或提示优化，故不匹配 3.2/3.3/3.4。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2403.14403v2  [cs.CL]  2024年3月28日</p>
+<h2>Adaptive-RAG: Learning to Adapt Retrieval-Augmented Large Language Models through Question Complexity</h2>
+<p>Soyeong Jeong 1 Jinheon Baek 2 Sukmin Cho 1 Sung Ju Hwang 1, 2 Jong C. Park 1 *</p>
+<p>计算机学院 1 人工智能研究生院 2</p>
+<p>韩国科学技术院（KAIST）1, 2</p>
+<p>{starsuzi,jinheon.baek,nelllpic,sjhwang82,jongpark}@kaist.ac.kr</p>
+<h2>Abstract</h2>
+<p>检索增强大语言模型（Retrieval-Augmented Large Language Models, LLMs）将来自外部知识库的非参数知识融入 LLMs，已成为在问答（Question-Answering, QA）等多种任务中提升回答准确性的一种颇具前景的方法。然而，尽管已有多种方法用于处理不同复杂度的查询，它们要么在处理简单查询时带来不必要的计算开销，要么无法充分应对复杂的多步查询；而实际上，并非所有用户请求都仅属于简单或复杂两类之一。在本工作中，我们提出了一种新颖的自适应问答框架，该框架能够根据查询复杂度，为（检索增强的）LLMs 动态选择从最简单到最复杂策略中最合适的一种。此外，这一选择过程通过一个分类器来实现，该分类器是一个较小的语言模型（LM），其训练目标是利用自动收集的标签来预测输入查询的复杂度级别，这些标签源自模型的实际预测结果以及数据集中固有的归纳偏置。该方法提供了一种均衡的策略，能够针对不同范围的查询复杂度，在迭代式与单步检索增强 LLMs 以及无检索方法之间无缝适配。我们在一组覆盖多种查询复杂度的开放域问答数据集上验证了我们的模型，结果表明，与包括自适应检索方法在内的相关基线相比，我们的方法提升了问答系统的整体效率与准确性。代码已发布于：https:// github.com/starsuzi/Adaptive-RAG 。</p>
+<h2>1 Introduction</h2>
+<p>近期的大语言模型（Large Language Models, LLMs）（Brown et al., 2020; OpenAI, 2023; Touvron et al., 2023; Anil et al., 2023）在包括问答（question answering, QA）（Yang et al., 2018; Kwiatkowski et al., 2019）在内的多种任务上展现出了压倒性的性能。然而，由于其知识完全依赖于参数化记忆（parametric memory），它们仍会生成事实性错误的答案（Kasai et al., 2022; Mallen et al., 2023）。与此同时，要记住所有（不断变化的）世界知识可能是不可能的。为解决这一问题，检索增强LLMs（retrieval-augmented LLMs）（Borgeaud et al., 2022; Izacard et al., 2023; Shi et al., 2023）——即通过额外的检索模块将非参数化知识融入LLMs的模型——受到了越来越多的关注。具体而言，这些模型会访问一个知识库（knowledge base），该知识库作为涵盖各学科和领域的庞大信息库，用于检索与给定输入相关的信息，然后将检索到的信息融入LLMs，从而使它们能够保持与世界知识同步的准确性和时效性。</p>
+<p>* 通讯作者</p>
+<figure><img src="assets/a108/figures/fig_1.png" alt="Figure 1: 不同检索增强生成方法的问答性能（F1）和效率（时间/查询）。我们使用 GPT-3.5-Turbo-Instruct 作为基础 LLM。" loading="lazy"></figure>
+<figcaption>Figure 1: 不同检索增强生成方法的问答性能（F1）和效率（时间/查询）。我们使用 GPT-3.5-Turbo-Instruct 作为基础 LLM。</figcaption>
+<p>检索增强LLMs的一个尤为突出的应用是处理QA任务，其目标是针对用户查询提供正确的答案，尤其是那些高复杂度的查询。早期关于检索增强LLMs的工作主要聚焦于单跳（single-hop）查询（Lazaridou et al., 2022; Ram et al., 2023），此类查询的答案通常可在单个文档中找到；因此，该方法包括基于查询检索一个相关文档，随后将该信息整合到问答模型中以形成回答。然而，与这种单跳问答不同，一些查询需要连接和聚合多个文档，而且这些查询往往无法通过单步的检索与回答过程来解答。一个示例查询是“攻占马拉科夫（Malakoff）的人们是何时来到菲利普斯堡（Philipsburg）所在地区的？”，该问题需要四个推理步骤才能解决。因此，为了有效处理此类复杂查询，近期的研究大多集中于多步、多推理的问答，这需要对LLMs和检索器进行多次迭代访问（Press et al., 2023; Trivedi et al., 2023），但代价是高昂的计算开销。</p>
+<figure><img src="assets/a108/figures/fig_2.png" alt="Figure 2: 不同检索增强 LLM 问答方法的概念性比较。(A) 该单步方法在响应查询时检索相关文档，然后生成答案。然而，对于需要多步推理的复杂查询，它可能并不足够。(B) 该多步方法迭代地检索文档并生成中间答案，虽然功能强大，但对于简单查询而言效率很低，因为它需要多次访问 LLM 和检索器。(C) 我们的自适应方法可以基于由我们的分类器判定的给定查询复杂度，为检索增强 LLM 选择最合适的策略，范围涵盖从迭代式、单步式到甚至无检索的方法。" loading="lazy"></figure>
+<figcaption>Figure 2: 不同检索增强 LLM 问答方法的概念性比较。(A) 该单步方法在响应查询时检索相关文档，然后生成答案。然而，对于需要多步推理的复杂查询，它可能并不足够。(B) 该多步方法迭代地检索文档并生成中间答案，虽然功能强大，但对于简单查询而言效率很低，因为它需要多次访问 LLM 和检索器。(C) 我们的自适应方法可以基于由我们的分类器判定的给定查询复杂度，为检索增强 LLM 选择最合适的策略，范围涵盖从迭代式、单步式到甚至无检索的方法。</figcaption>
+<p>然而，我们应当重新思考：在真实场景中，用户提出的所有请求都是复杂的吗？事实上，用户可能经常提出简单直接的问题，而只是偶尔提出复杂的问题。具体而言，诸如“巴黎是什么的首都？”这样的查询，相比前述的多步查询，更可能被频繁提出，而且这类较简单的查询或许可以由 LLMs 自身轻松回答，无需访问外部知识。换言之，对于简单查询，多步问答方法可能带来不必要的计算开销，尽管它对复杂查询而言至关重要（见图 2 (A)）。另一方面，用单步检索甚至无检索策略来处理复杂查询则远远不够（图 2 (B)）。这表明需要一种自适应问答系统，能够根据查询复杂度动态调整检索增强 LLMs 的运行策略。虽然近期的一些方法能够基于查询中实体的频率（Mallen et al., 2023）或基于模型为多步问答生成的输出（Trivedi et al., 2023）来实现这一点，但它们仍然次优：前一类方法过于简单，未能考虑多跳查询；而后一类方法则过于复杂，在经过若干轮模块访问之后才终止答案求解步骤。</p>
+<p>在本工作中，考虑到真实世界查询的多样化复杂度级别，我们认为以往“一刀切”的方法可能不足以覆盖所有情况。相反，我们提出从一系列（检索增强的）LLMs 中选择最合适的策略，其中每个模型都针对输入查询的特定复杂度量身定制。值得注意的是，该过程中的一个关键步骤是预先定义查询复杂度，这对于确定最适合该查询的模型至关重要。在本工作中，我们通过一个新颖的分类器将这一过程付诸实施，该分类器是一个较小的模型，经过训练用于预测输入查询的复杂度级别（见图 2 (c)）。此外，我们无需人工标注即可自动收集其训练数据集，方法是利用预测结果（即哪些模型能够准确回答哪些查询），并利用现有数据集中固有的偏置（即数据集中的样本要么为单步问答场景而设计，要么为多步问答场景而设计）。所提出的方法可以在面向复杂查询的迭代式 LLM 增强方法、面向较简单查询单步方法，以及面向最直接查询（可由 LLMs 自身回答）的无检索增强方法之间提供一个稳健的折中方案，从而显著提升整体效率与准确性，如图 1 所示。我们将我们的框架称为自适应检索增强生成（Adaptive Retrieval-Augmented Generation, Adaptive-RAG）。</p>
+<p>我们在开放域问答（QA）基准测试（benchmark）数据集上对 Adaptive-RAG 进行验证，这些数据集涵盖了从单跳（single-hop）(Rajpurkar et al., 2016; Joshi et al., 2017; Kwiatkowski et al., 2019) 到多跳（multi-hop）(Yang et al., 2018; Ho et al., 2020; Trivedi et al., 2022b) 查询的广泛查询复杂度范围。实验结果表明，与先前的自适应策略相比，我们的方法在多个大语言模型（LLMs）上显著提升了整体准确性与效率，例如 GPT-3.5 (Brown et al., 2020) 和 FLAN-T5 系列 (Chung et al., 2022)。</p>
+<p>我们的贡献与发现有三方面：</p>
+<h2>2 Related Work</h2>
+<p>开放域问答（Open-domain QA） 开放域问答是通过检索与查询相关的文档，并对其进行解读以提供答案，从而准确回答查询的任务（Chen et al., 2017; Zhu et al., 2021），因此通常涉及两个模块：检索器（retriever）（Karpukhin et al., 2020; Xiong et al., 2021）和阅读器（reader）（Yang et al., 2019; Izacard and Grave, 2021; Jeong et al., 2023）。随着凭借数十亿级参数而具备卓越推理能力的大语言模型（LLMs）的出现（Wei et al., 2022a），LLMs 与检索器之间的协同作用带来了显著的进展（Lazaridou et al., 2022; Ram et al., 2023）。具体而言，这种集成已被证明能够通过增强阅读器的推理能力来缓解 LLMs 的幻觉问题，并利用检索到的外部文档，从而提升开放域问答的性能（Cho et al., 2023）。然而，尽管单跳检索增强 LLMs 取得了这些进展，某些查询的复杂度仍需要更复杂的策略。</p>
+<p>多跳问答（Multi-hop QA） 多跳问答是传统开放域问答的扩展，它额外要求系统全面地收集来自多个文档的信息并将其置于上下文中（通常以迭代方式进行），以回答更复杂的查询（Trivedi et al., 2022a; Yang et al., 2018）。在多跳问答领域，通常采用迭代访问 LLMs 与检索模块的方法。具体而言，Khattab et al. (2022)、Press et al. (2023)、Pereira et al. (2023) 和 Khot et al. (2023) 提出首先将多跳查询分解为更简单的单跳查询，反复访问 LLMs 和检索器以求解这些子查询，然后合并它们的解以形成完整答案。与这种基于分解的方法不同，其他近期研究，如 Yao et al. (2023) 和 Trivedi et al. (2023)，探索了将思维链（Chain-of-Thought, CoT）推理（Wei et al., 2022b）——一种生成逻辑思维序列的方法——与文档检索交替进行，并反复应用这一过程，直到推理链生成答案。此外，Jiang et al. (2023) 提出了一种方法：当生成句子中的词元置信度较低时，反复检索新文档。然而，上述方法忽略了一个事实：在现实场景中，查询具有多种多样的复杂度。因此，对每个查询都迭代访问 LLMs 和检索器将在很大程度上是低效的，因为有些查询可能只需单次检索步骤、甚至仅凭 LLM 本身就足以解决。</p>
+<p>自适应检索 为了处理复杂度各异的查询，自适应检索策略旨在根据每个查询的复杂度动态决定是否检索文档。沿着这一思路，Mallen et al. (2023) 提出根据查询中实体的频率来判断查询的复杂度级别，并建议仅当该频率低于某个阈值时才使用检索模块。然而，这种方法仅关注“是否检索”这一二元决策，对于需要多个推理步骤的更复杂查询而言可能并不足够。此外，Qi et al. (2021) 提出了一种方法，该方法重复执行一组固定的操作（检索、阅读和重排序），直到为给定查询得出答案，其建立在传统的类BERT语言模型（LMs）之上。然而，与我们的 Adaptive-RAG 不同——后者预先确定查询复杂度，并据此调整任何现成大语言模型（LLMs）的运行行为——该方法对每个查询都应用相同的固定操作，而不考虑其复杂度，同时还需要对语言模型进行额外的专门训练。与我们的工作同期，Asai et al. (2024) 提出训练一个复杂的模型来动态地执行检索、评判和文本生成。尽管如此，我们认为上述所有依赖单一模型的自适应检索方法在处理各种不同复杂度的查询时可能都并非最优，因为它们对所有输入查询而言往往要么过于简单、要么过于复杂，这就需要一种能够根据查询复杂度选择最适合的检索增强大语言模型策略的新方法。</p>
+<h2>3 Method</h2>
+<p>在本节中，我们描述了使检索增强大语言模型（LLM）实现自适应的方法，即通过预先确定查询复杂度，然后为检索增强大语言模型选择最合适的策略。</p>
+<h2>3.1 Preliminaries</h2>
+<p>在这种多步骤方法中，LLM 与 Retriever 进行多轮交互，逐步完善其对 q 的理解，直至根据在这些多个步骤中积累的发现形成最终答案。具体而言，该过程从初始查询 q 开始，在每一个检索步骤 i 中，都会从 D 中检索新的文档 d_i，然后将其并入 LLM 的输入，如下所示：¯a_i = LLM(q, d_i, c_i)，其中附加上下文 c_i 可以由先前的文档和结果组成（d_1, d_2, ..., d_{i-1}, ¯a_1, ¯a_2, ..., ¯a_{i-1}），且 d_i = Retriever(q, c_i; D)¹。我们想指出，这种迭代式的多步骤过程使 LLM 能够构建一个更加全面、广泛的基础，从而有效地求解查询，尤其擅长处理复杂的多跳（multi-hop）查询，即答案依赖于相互关联的信息片段的查询。然而，需要注意的是，由于需要反复访问 Retriever 和 LLM，这种多步骤方法可能非常消耗资源，会带来高昂的计算成本。</p>
+<h2>3.2 Adaptive-RAG: Adaptive Retrieval-Augmented Generation</h2>
+<p>我们现在介绍我们所提出的自适应检索增强大语言模型（LLM），其构建于上一节所述的三种不同策略之上，旨在根据查询的复杂度选择最合适的策略。</p>
+<p>适配检索增强大语言模型 需要注意的是，在现实场景中，来自用户的 q 并非都具有相同的复杂度，这就需要为每个查询量身定制处理策略。换言之，采用最基本的不基于检索的方法 LLM(q) 来应对复杂的查询 q 同样会是无效的（图2，A）；反之，对简单的 q 使用更为精细的多步骤方法 LLM(q, d, c) 则会是低效的（图2，B）。因此，我们的自适应框架旨在动态调整检索增强大语言模型的查询处理策略，其实现方式是在尝试求解之前先确定每个查询的复杂度。值得注意的是，该框架能够提供一个稳健的中间地带，涵盖一系列解决方案：从针对最简单直接查询的最简方法，到针对中等复杂度查询的单步方法，乃至针对复杂查询的最全面、最严谨的方法。此外，由于 LLM 和 Retriever 的运算过程不随其输入变化、始终保持一致，我们的方法可以在不同复杂度的查询之间无缝地来回切换，而在适配过程中无需更改内部模型架构或参数。</p>
+<p>1 值得注意的是，在不同的多步骤检索增强大语言模型方法中，LLM 和 Retriever 的具体实现各不相同（Trivedi et al., 2023; Press et al., 2023; Yao et al., 2023）；因此，上下文 c_i 可能完全不包含、部分包含或全部包含先前的文档和答案。</p>
+<p>查询复杂度评估 为了使我们的自适应检索增强大语言模型框架得以实际运作，我们需要确定查询的复杂度；为实现这一点，我们提出建模一个复杂度分类器，其目标是返回给定查询的适当复杂度级别。具体而言，给定查询 q，我们的分类器可以形式化表示为：o = Classifier(q)，其中 Classifier 是一个较小的语言模型，经过训练可将查询分类到三种不同复杂度级别之一，o 为其对应的类别标签。在我们的分类器设计中，共有三个类别标签：&#x27;A&#x27;、&#x27;B&#x27; 和 &#x27;C&#x27;，其中 &#x27;A&#x27; 表示 q 较为简单直接，可由 LLM(q) 自身回答；&#x27;B&#x27; 表示 q 具有中等复杂度，至少需要单步方法 LLM(q, d)；&#x27;C&#x27; 表示 q 较为复杂，需要最全面的求解方法 LLM(q, d, c)²。</p>
+<p>训练策略 剩下的步骤是训练作为 Classifier 的那个较小的语言模型，使其能够针对给定查询 q 准确预测其复杂度 o。然而，目前尚无包含查询-复杂度对的标注数据集可用。因此，我们提出采用两种特定策略来自动构建训练数据集。</p>
+<p>具体而言，我们首先基于三种不同的检索增强 LLM 策略所得的结果来标注查询复杂度，以便根据查询的需求来确定其标签。例如，如果最简单的非检索方法能够正确生成答案，则其对应查询的标签被分配为 &#x27;A&#x27;。此外，为了在为查询提供标签时打破不同模型之间的平局，我们赋予更简单的模型更高的优先级。换言之，如果单步方法和多步方法都产生了相同的正确答案，而非检索方法失败了，我们就为其对应的查询分配标签 &#x27;B&#x27;。</p>
+<p>2 我们考虑三个级别的查询复杂度，并将对更细粒度复杂度的探索留作未来工作。</p>
+<p>然而，这种标注策略存在一个局限，即并非所有查询都能被分配到标签，因为三种检索增强方法可能全部无法生成正确答案。另一方面，考虑到基准测试数据集的构建方式，这些数据集对于其查询而言最适合采用哪种检索增强 LLM 策略，可能已经蕴含了有意义的归纳偏置（例如，需要顺序推理的 QA 数据集通常需要多步方法；而那些带有已标注单文档的数据集，其查询理想情况下可以通过单步方法得到回答）。因此，对于在第一轮标注步骤之后仍未获得标签的查询，我们将单跳（single-hop）数据集中的查询分配为 &#x27;B&#x27;，将多跳数据集中的查询分配为 &#x27;C&#x27;。最后，我们使用交叉熵损失，在这些自动收集的查询-复杂度对 3 上训练 Classifier。随后，在推理阶段，我们可以通过将查询前向传入 Classifier 来确定该查询的复杂度，即 {&#x27;A&#x27;, &#x27;B&#x27;, &#x27;C&#x27;} 之一：o = Classifier(q)。</p>
+<h2>4 Experimental Setups</h2>
+<p>在本节中，我们将介绍数据集、模型、指标和实现细节。我们在附录 A 中提供了更多细节。</p>
+<h2>4.1 Datasets</h2>
+<p>为了模拟不同查询具有不同复杂度的真实场景，我们在统一的实验设置中同时使用单跳（single-hop）和多跳（multi-hop）问答（QA）数据集。</p>
+<p>单跳问答（Single-hop QA） 对于较简单的查询，我们使用三个基准测试（benchmark）单跳 QA 数据集，它们由查询及其包含答案的相关文档组成，即 1) SQuAD v1.1 (Rajpurkar et al., 2016)、2) Natural Questions (Kwiatkowski et al., 2019) 和 3) TriviaQA (Joshi et al., 2017)。</p>
+<p>3 由于我们自动分配分类器标签，标注中可能存在错误，并且可能存在更先进的自动分配标签策略，我们将这些留作未来工作。</p>
+<div class="tablewrap"><table><thead><tr><th>Types</th><th>Methods</th><th>FLAN-T5-XL (3B).EM</th><th>FLAN-T5-XL (3B).F1</th><th>FLAN-T5-XL (3B).Acc</th><th>FLAN-T5-XL (3B).Step</th><th>FLAN-T5-XL (3B).Time</th><th>FLAN-T5-XXL (11B).EM</th><th>FLAN-T5-XXL (11B).F1</th><th>FLAN-T5-XXL (11B).Acc</th><th>FLAN-T5-XXL (11B).Step</th><th>FLAN-T5-XXL (11B).Time</th><th>GPT-3.5 (Turbo).EM</th><th>GPT-3.5 (Turbo).F1</th><th>GPT-3.5 (Turbo).Acc</th><th>GPT-3.5 (Turbo).Step</th><th>GPT-3.5 (Turbo).Time</th></tr></thead><tbody>
+<tr><td>Simple</td><td>No Retrieval</td><td>14.87</td><td>21.12</td><td>15.97</td><td>0</td><td>0.11</td><td>17.83</td><td>25.14</td><td>19.33</td><td>0</td><td>0.08</td><td>35.77</td><td>48.56</td><td>44.27</td><td>0</td><td>0.71</td></tr>
+<tr><td></td><td>Single-step Approach</td><td>34.83</td><td>44.31</td><td>38.87</td><td>1</td><td>1</td><td>37.87</td><td>47.63</td><td>41.9</td><td>1</td><td>1</td><td>34.73</td><td>46.99</td><td>45.27</td><td>1</td><td>1</td></tr>
+<tr><td></td><td>Adaptive Retrieval</td><td>23.87</td><td>32.24</td><td>26.73</td><td>0.5</td><td>0.56</td><td>26.93</td><td>35.67</td><td>29.73</td><td>0.5</td><td>0.54</td><td>35.9</td><td>48.2</td><td>45.3</td><td>0.5</td><td>0.86</td></tr>
+<tr><td>Adaptive</td><td>Self-RAG ∗</td><td>9.9</td><td>20.79</td><td>31.57</td><td>0.72</td><td>0.43</td><td>10.87</td><td>22.98</td><td>34.13</td><td>0.74</td><td>0.23</td><td>10.87</td><td>22.98</td><td>34.13</td><td>0.74</td><td>1.5</td></tr>
+<tr><td></td><td>Adaptive-RAG (Ours)</td><td>37.17</td><td>46.94</td><td>42.1</td><td>2.17</td><td>3.6</td><td>38.9</td><td>48.62</td><td>43.77</td><td>1.35</td><td>2</td><td>37.97</td><td>50.91</td><td>48.97</td><td>1.03</td><td>1.46</td></tr>
+<tr><td>Complex</td><td>Multi-step Approach</td><td>39</td><td>48.85</td><td>43.7</td><td>4.69</td><td>8.81</td><td>40.13</td><td>50.09</td><td>45.2</td><td>2.13</td><td>3.8</td><td>38.13</td><td>50.87</td><td>49.7</td><td>2.81</td><td>3.33</td></tr>
+<tr><td>Oracle</td><td>Adaptive-RAG w/ Oracle</td><td>45</td><td>56.28</td><td>49.9</td><td>1.28</td><td>2.11</td><td>47.17</td><td>58.6</td><td>52.2</td><td>0.84</td><td>1.1</td><td>47.7</td><td>62.8</td><td>58.57</td><td>0.5</td><td>1.03</td></tr>
+</tbody></table></div>
+<p>| Types    | Methods                |   FLAN-T5-XL (3B).EM |   FLAN-T5-XL (3B).F1 |   FLAN-T5-XL (3B).Acc |   FLAN-T5-XL (3B).Step |   FLAN-T5-XL (3B).Time |   FLAN-T5-XXL (11B).EM |   FLAN-T5-XXL (11B).F1 |   FLAN-T5-XXL (11B).Acc |   FLAN-T5-XXL (11B).Step |   FLAN-T5-XXL (11B).Time |   GPT-3.5 (Turbo).EM |   GPT-3.5 (Turbo).F1 |   GPT-3.5 (Turbo).Acc |   GPT-3.5 (Turbo).Step |   GPT-3.5 (Turbo).Time |</p>
+<figcaption>Table 1: 在包含单跳和多跳查询的开放域问答基准数据集集合上，使用不同 LLM 的平均结果。Self-RAG ∗ 使用不同的基础 LLM 训练，即 LLaMA2（Touvron et al., 2023）；因此，我们将 FLAN-T5-XL (3B) 的结果与使用 LLaMA2 (7B) 的 Self-RAG 的结果进行比较，将其他方法的结果与使用 LLaMA2 (13B) 的 Self-RAG 的结果进行比较。我们将我们的结果加粗显示，以便于比较。</figcaption>
+<p>多跳问答（Multi-hop QA） 为了考虑更复杂的查询场景，我们使用三个基准测试多跳 QA 数据集，它们需要对多个文档进行顺序推理，即 1) MuSiQue (Trivedi et al., 2022a)、2) HotpotQA (Yang et al., 2018) 和 3) 2WikiMultiHopQA (Ho et al., 2020)。</p>
+<h2>4.2 Models</h2>
+<h2>4.3 Evaluation Metrics</h2>
+<p>在评估自适应模型时，必须同时考虑任务性能与效率以及二者之间的权衡。因此，我们使用五个指标来报告结果，其中三个衡量有效性，另外两个衡量效率。具体而言，在有效性方面，我们遵循标准评估协议（Mallen et al., 2023; Baek et al., 2023; Asai et al., 2024），采用 F1、EM 和准确率（Accuracy, Acc），其中 F1 衡量预测答案与真实答案之间重叠词的数量，EM 衡量二者是否完全相同，Acc 衡量预测答案是否包含真实答案。在效率方面，我们衡量检索与生成步骤的数量，以及相对于单步方法而言回答每个查询的平均耗时。</p>
+<h2>4.4 Implementation Details</h2>
+<p>为了进行公平比较，并遵循 Mallen et al. (2023) 与 Trivedi et al. (2023) 的做法，我们在所有不同的模型上均使用相同的检索器，即一种称为 BM25（Robertson et al., 1994）的基于词项的稀疏检索模型。对于外部文档语料库，我们根据数据集类型使用不同的来源：单跳数据集使用由 Karpukhin et al. (2020) 预处理的 Wikipedia 语料库，多跳数据集使用由 Trivedi et al. (2023) 预处理的语料库。在用于生成答案的大语言模型（LLM）方面，我们使用 FLAN-T5 系列模型（Chung et al., 2022），包括具有 3B 参数的 XL 版本和具有 11B 参数的 XXL 版本，以及 GPT-3.5 模型（gpt-3.5-turbo-instruct）。在检索增强 LLM 的设计方面，我们遵循 Trivedi et al. (2023) 的实现细节，其中包括输入提示、指令以及用于评估的测试样本数量（例如每个数据集 500 个样本）。在我们的 Adaptive-RAG 中，对于查询复杂度分类器，我们使用并训练 T5-Large 模型（Raffel et al., 2020）。具体而言，该分类器在最多 100 次训练迭代内，根据验证集选取表现最佳的 epoch 进行训练，学习率为 3e-</p>
+<div class="tablewrap"><table><thead><tr><th>Data</th><th>Types</th><th>Methods</th><th>SQuAD.EM</th><th>SQuAD.F1</th><th>SQuAD.Acc</th><th>SQuAD.Step</th><th>SQuAD.Time</th><th>Natural Questions.EM</th><th>Natural Questions.F1</th><th>Natural Questions.Acc</th><th>Natural Questions.Step</th><th>Natural Questions.Time</th><th>TriviaQA.EM</th><th>TriviaQA.F1</th><th>TriviaQA.Acc</th><th>TriviaQA.Step</th><th>TriviaQA.Time</th></tr></thead><tbody>
+<tr><td>Single-step</td><td>Simple</td><td>No Retrieval Single-step Approach</td><td>3.60 27.80</td><td>10.50 39.30</td><td>5.00 34.00</td><td>0.00 1.00</td><td>0.11 1.00</td><td>14.20 37.80</td><td>19.00 47.30</td><td>15.60 44.60</td><td>0.00 1.00</td><td>0.13 1.00</td><td>25.00 53.60</td><td>31.80 62.40</td><td>27.00 60.20</td><td>0.00 1.00</td><td>0.13 1.00</td></tr>
+<tr><td></td><td></td><td>Adaptive Retrieval</td><td>13.40</td><td>23.10</td><td>17.60</td><td>0.50</td><td>0.55</td><td>28.20</td><td>36.00</td><td>33.00</td><td>0.50</td><td>0.56</td><td>38.40</td><td>46.90</td><td>42.60</td><td>0.50</td><td>0.56</td></tr>
+<tr><td></td><td>Adaptive</td><td>Self-RAG ∗</td><td>2.20</td><td>11.20</td><td>18.40</td><td>0.63</td><td>0.50</td><td>31.40</td><td>39.00</td><td>33.60</td><td>0.63</td><td>0.17</td><td>12.80</td><td>29.30</td><td>57.00</td><td>0.68</td><td>0.45</td></tr>
+<tr><td></td><td></td><td>Adaptive-RAG (Ours)</td><td>26.80</td><td>38.30</td><td>33.00</td><td>1.37</td><td>2.02</td><td>37.80</td><td>47.30</td><td>44.60</td><td>1.00</td><td>1.00</td><td>52.20</td><td>60.70</td><td>58.20</td><td>1.23</td><td>1.54</td></tr>
+<tr><td></td><td>Complex</td><td>Multi-step Approach</td><td>24.40</td><td>35.60</td><td>29.60</td><td>4.52</td><td>9.03</td><td>38.60</td><td>47.80</td><td>44.20</td><td>5.04</td><td>10.18</td><td>53.80</td><td>62.40</td><td>60.20</td><td>5.28</td><td>9.22</td></tr>
+<tr><td></td><td>Oracle</td><td>Adaptive-RAG w/ Oracle</td><td>32.00</td><td>45.60</td><td>38.20</td><td>1.24</td><td>1.60</td><td>47.40</td><td>57.10</td><td>53.60</td><td>1.10</td><td>1.55</td><td>61.60</td><td>70.20</td><td>66.40</td><td>0.79</td><td>1.10</td></tr>
+</tbody></table></div>
+<p>| Data        | Types    | Methods                           | SQuAD.EM   | SQuAD.F1    | SQuAD.Acc   | SQuAD.Step   | SQuAD.Time   | Natural Questions.EM   | Natural Questions.F1   | Natural Questions.Acc   | Natural Questions.Step   | Natural Questions.Time   | TriviaQA.EM   | TriviaQA.F1   | TriviaQA.Acc   | TriviaQA.Step   | TriviaQA.Time   |</p>
+<figcaption>Table 2: 以 FLAN-T5-XL (3B) 作为 LLM 时，在各数据集集合中每个数据集上的结果。我们将我们的结果加粗显示。</figcaption>
+<figure><img src="assets/a108/figures/fig_3.png" alt="Figure 3: 使用 FLAN-T5 XL（左）和 XXL（中）时，检索增强 LLM 的不同自适应方法在问答和查询复杂度评估上的性能。对于查询复杂度的标注，我们使用根据模型预测结果标注得到的银数据（silver data）（见第 3.2 节的描述）。我们还提供了三个标签之间的混淆矩阵（右）。" loading="lazy"></figure>
+<figcaption>Figure 3: 使用 FLAN-T5 XL（左）和 XXL（中）时，检索增强 LLM 的不同自适应方法在问答和查询复杂度评估上的性能。对于查询复杂度的标注，我们使用根据模型预测结果标注得到的银数据（silver data）（见第 3.2 节的描述）。我们还提供了三个标签之间的混淆矩阵（右）。</figcaption>
+<p>5，并使用 AdamW（Loshchilov and Hutter, 2019）作为优化器。关于其训练数据，我们基于各方法的归纳偏置，从 6 个数据集中采样并标注了 400 个查询（单步方法对应单跳，多步方法对应多跳）。此外，我们还使用了三种不同策略在从每个数据集采样的 400 个查询上的预测结果。请注意，用于分类器训练的查询与用于问答（QA）测试的查询并不重叠。</p>
+<h2>5 Experimental Results and Analyses</h2>
+<p>在本节中，我们展示整体实验结果，并对我们的方法进行深入分析。</p>
+<p>主要结果 首先，表 1 展示了我们在所有所考虑数据集上取平均的主要结果，这些结果证实了我们的假设：简单的检索增强策略不如复杂策略有效，而复杂策略的成本又显著高于简单策略。此外，我们在表 2 中报告了使用 FLAN-T5-XL 在各个单跳和多跳数据集上更细粒度的结果（附录的表 7 和表 8 中还给出了使用不同 LLM 的更多结果），这些结果与表 1 中观察到的结果一致。</p>
+<p>然而，在现实场景中，并非所有用户提出的查询都具有相同的复杂度，这凸显了对自适应策略需求的重要性。请注意，在各自适应策略中，我们的 Adaptive-RAG 相比竞争方法展现出显著更优的效果（表 1）。这表明，仅仅关注是否进行检索这一决策是次优的。此外，如表 2 所示，这类简单的自适应策略尤其不足以处理多跳数据集中的复杂查询，因为这些查询需要对多个文档上的信息进行聚合与推理。与此同时，我们的方法通过为复杂查询进一步引入迭代模块，能够采用更细粒度的查询处理策略。而且，在现实环境中，我们不仅需要考虑有效性，还需要考虑效率。如表 1 所示，与复杂的多步策略相比，我们提出的自适应策略在所有模型规模上都显著更加高效。在大语言模型（LLM）时代，这一点具有重要意义，因为访问 LLM 的成本是实际应用和可扩展性的关键因素。最后，为了考察 Adaptive-RAG 的性能上限，我们报告了其在分类性能完美的 oracle 分类器下的表现。如表 1 和表 2 所示，我们观察到它取得了最佳性能，同时比不使用 oracle 分类器的 Adaptive-RAG 高效得多。这些结果验证了我们所提出的基于查询复杂度自适应调整检索增强 LLM 策略这一方案的有效性与重要性，并进一步指出了开发更优分类器以实现最佳性能的方向。</p>
+<div class="tablewrap"><table><thead><tr><th>Labels</th><th>Time/Query (Sec.)</th><th>Percentage (%)</th></tr></thead><tbody>
+<tr><td>No (A)</td><td>0.35</td><td>8.6</td></tr>
+<tr><td>One (B)</td><td>3.08</td><td>53.33</td></tr>
+<tr><td>Multi (C)</td><td>27.18</td><td>38.07</td></tr>
+</tbody></table></div>
+<p>| Labels    |   Time/Query (Sec.) |   Percentage (%) |</p>
+<figcaption>Table 3: 每个查询的确切耗时，以及分类器预测的标签在所有样本中所占的百分比。</figcaption>
+<p>分类器性能　为了理解所提出的分类器是如何工作的，我们分析了其在不同复杂度标签上的性能。如图 3（左图和中图）所示，我们的 Adaptive-RAG 的分类准确率优于其他自适应检索基线方法，从而带来了整体问答（QA）性能的提升。换言之，这一结果表明，我们的 Adaptive-RAG 能够更准确地划分具有不同粒度的复杂度级别，包括不执行检索、仅执行一次检索以及执行多次检索。除了图 3（左图和中图）中我们的分类器在这三个标签上取平均的真正例（true positive）性能之外，我们还在图 3（右图）中进一步报告了其混淆矩阵。我们注意到，混淆矩阵揭示了一些值得关注的趋势：&#x27;C (Multi)&#x27; 有时会被误分类为 &#x27;B (One)&#x27;（约 31%），而 &#x27;B (One)&#x27; 会被误分类为 &#x27;C (Multi)&#x27;（约 23%）；&#x27;A (No)&#x27; 常被误分类为 &#x27;B (One)&#x27;（约 47%），较少被误分类为 &#x27;C (Multi)&#x27;（约 22%）。尽管图 3 中的总体结果表明我们的分类器能够有效地区分这三个标签，但基于此类误分类对其作进一步改进将是未来工作中一个有意义的方向。</p>
+<p>分类器效率分析　表 1 展示了三种不同 RAG 策略各自的相对耗时，我们进一步在表 3 中给出了我们的 Adaptive-RAG 每个查询的精确耗时，以及我们的查询复杂度分类器所预测标签的分布。与表 1（相对时间）中的耗时结果类似，表 3（精确时间）表明，通过识别简单或直接的查询，效率可以得到大幅提升。</p>
+<p>**分类器训练数据分析** 我们已经证明，分类器在自适应检索中发挥着重要作用。在此，我们通过对完整训练策略进行消融实验，进一步分析训练分类器的不同策略；该完整策略包含两种方法：从模型的预测结果生成银数据（silver data），以及利用数据集中的归纳偏置（见第 3.2 节）。如表 4 所示，与仅依赖由归纳偏置所得数据的训练策略相比，我们的方法效率显著更高。这种效率的部分原因在于，我们的方法还考虑了完全不使用任何文档的情形，这一点也由分类准确率所表明；与此同时，现有数据集中的查询并未捕捉到有关是否需要检索的信息。另一方面，在仅使用由正确预测所标注的银数据的情况下，尽管其整体分类准确率较高，但整体 QA 性能表明，仅依赖银数据可能并非最优。这可能是因为此类银数据未覆盖被错误预测查询的复杂度标签，从而导致在与之相关的查询上泛化效果较差。与此同时，通过进一步纳入来自数据集偏置的复杂度标签（单跳 vs 多跳），分类器在预测多跳查询时变得更加准确，从而带来了更好的性能。值得注意的是，我们的自动标注策略只是训练分类器的两种特定实例化方式，还可能存在其他实例化方式，我们将其留作未来工作。</p>
+<div class="tablewrap"><table><thead><tr><th>Training Strategies</th><th>QA.F1</th><th>QA.Step</th><th>Classifier (Accuracy).All</th><th>Classifier (Accuracy).No</th><th>Classifier (Accuracy).One</th><th>Classifier (Accuracy).Multi</th></tr></thead><tbody>
+<tr><td>Adaptive-RAG (Ours)</td><td>46.94</td><td>1084</td><td>54.52</td><td>30.52</td><td>66.28</td><td>65.45</td></tr>
+<tr><td>w/o Binary</td><td>43.43</td><td>640</td><td>60.3</td><td>62.19</td><td>65.7</td><td>39.55</td></tr>
+<tr><td>w/o Silver</td><td>48.79</td><td>1464</td><td>40</td><td>0</td><td>53.98</td><td>75.91</td></tr>
+</tbody></table></div>
+<p>| Training Strategies   |   QA.F1 |   QA.Step |   Classifier (Accuracy).All |   Classifier (Accuracy).No |   Classifier (Accuracy).One |   Classifier (Accuracy).Multi |</p>
+<figcaption>Table 4: 通过改变用于训练分类器的数据标注策略，在问答和复杂度分类上的结果。</figcaption>
+<p>**分类器规模分析** 为了研究我们的分类器在不同规模下的敏感性，我们开展了进一步的实验。如表 6 所示，我们观察到不同规模的分类器之间不存在显著的性能差异，即使规模较小的分类器具有更低的复杂度和更少的参数。这表明，我们提出的分类器能够在实际使用场景中以更小的规模实现资源高效的配置，同时不损害性能。</p>
+<p>**案例研究** 我们开展了一项案例研究，以定性地比较我们的 Adaptive-RAG 与 Adaptive Retrieval。表 5 展示了针对简单问题和复杂问题所分类出的复杂度以及查询处理模式。首先，对于简单的单跳问题，我们的 Adaptive-RAG 识别出该问题仅通过利用大语言模型（LLM）关于“Google”的参数化知识即可回答。相比之下，</p>
+<div class="tablewrap"><table><thead><tr><th>Dataset</th><th>Question</th><th>Adaptive Retrieval</th><th>Adaptive-RAG (Ours)</th></tr></thead><tbody>
+<tr><td>NQ (Single-hop)</td><td>Which famous corpo- rate logo changed to a flat colour/color sans serif font in its first ma- jor change since 1999?</td><td>Query Type: B (Single-step Approach) Reasoning: The famous corporate logo that changed to a flat color sans-serif font in its first major change since 1999 is Microsoft. Microsoft changed its logo in 2012, replacing the italicized, multi-colored font with a simple, flat, grey font. So the answer is: Microsoft.</td><td>Query Type: A (Non Retrieval) Reasoning: The famous corporate logo that changed to a flat color sans serif font in its first ma- jor change since 1999 is Google. Google changed its logo in 2015. So the answer is: Google.</td></tr>
+<tr><td>MuSiQue (Multi-hop)</td><td>Who is the child of the Italian navigator who explored the eastern coast of the continent César Gaytan was born in for the English?</td><td>Query Type: A (Non Retrieval) Reasoning: César Gaytan was born in the conti- nent of North America. The Italian navigator who explored the eastern coast of North America for the English was Giovanni Caboto, also known as John Cabot. So the answer is: Giovanni Caboto/John Cabot.</td><td>Query Type: C (Multi-step Approach) Reasoning: Césarr Gaytan was born in Guadalajara, Jalisco, Mexico. The Italian navigator who explored the eastern coast of the continent for the English is John Cabot. John Cabot&#x27;s son is Sebastian Cabot. So the answer is: Sebastian Cabot.</td></tr>
+</tbody></table></div>
+<p>| Dataset             | Question                                                                                                                            | Adaptive Retrieval                                                                                                                                                                                                                                                                                                      | Adaptive-RAG (Ours)                                                                                                                                                                                                                                                                 |</p>
+<figcaption>Table 5: 使用 GPT-3.5 (Turbo) 的案例研究，其中事实错误用红色表示，准确信息用蓝色表示。</figcaption>
+<div class="tablewrap"><table><thead><tr><th>Sizes</th><th>QA.F1</th><th>QA.Step</th><th>Classifier (Accuracy).All</th><th>Classifier (Accuracy).No</th><th>Classifier (Accuracy).One</th><th>Classifier (Accuracy).Multi</th></tr></thead><tbody>
+<tr><td>Small (60M)</td><td>45.83</td><td>964</td><td>53.48</td><td>26.65</td><td>70.62</td><td>53.18</td></tr>
+<tr><td>Base (223M)</td><td>45.97</td><td>983</td><td>53.41</td><td>26.42</td><td>69.46</td><td>56.82</td></tr>
+<tr><td>Large (770M)</td><td>46.94</td><td>1084</td><td>54.52</td><td>30.52</td><td>66.28</td><td>65.45</td></tr>
+</tbody></table></div>
+<p>| Sizes        |   QA.F1 |   QA.Step |   Classifier (Accuracy).All |   Classifier (Accuracy).No |   Classifier (Accuracy).One |   Classifier (Accuracy).Multi |</p>
+<figcaption>Table 6: 使用不同模型大小的分类器时的结果。</figcaption>
+<p>Adaptive Retrieval 会获取额外的文档，导致处理时间变长，并且由于包含了关于 &#x27;Microsoft&#x27; 的部分无关信息，偶尔会产生错误的回答。与此同时，面对一个复杂的问题，Adaptive-RAG 会搜寻相关信息，包括诸如 &#x27;a son of John Cabot&#x27; 这类可能并未存储在大语言模型（LLM）中的细节，而 Adaptive Retrieval 则未能从外部来源请求此类信息，从而得出了不准确的答案。</p>
+<h2>6 Conclusion</h2>
+<p>在本工作中，我们提出了自适应检索增强生成（Adaptive Retrieval-Augmented Generation）框架，称为 Adaptive-RAG，用于处理各种复杂度的查询。具体而言，Adaptive-RAG 被设计为在统一的检索增强大语言模型（LLM）中，根据所遇到查询的复杂度动态调整其查询处理策略，其范围涵盖从针对最简单查询的非检索方法，到针对中等复杂度查询的单步方法，再到针对复杂查询的多步方法。我们 Adaptive-RAG 的核心步骤在于确定给定查询的复杂度，这对于为其选择最合适的回答策略至关重要。为了将这一过程付诸实施，我们使用查询-复杂度对训练了一个较小的语言模型，这些查询-复杂度对是根据预测结果以及数据集中的归纳偏置自动标注得到的。我们对 Adaptive-RAG 进行了验证</p>
+<p>在一系列开放域问答（QA）数据集上，涵盖多种查询复杂度，包括单跳和多跳问题。结果表明，与现有的、在不同查询复杂度上往往要么极简、要么极繁的一刀切方法相比，我们的 Adaptive-RAG 提升了 QA 系统的整体准确率与效率，为处理复杂查询分配更多资源，同时高效地处理较简单的查询。</p>
+<h2>Limitations</h2>
+<p>尽管我们的 Adaptive-RAG 通过判定查询复杂度并进而采用最合适的方法来处理该查询，在有效性与效率方面展现出明显优势，但仍需认识到，从训练数据集与架构的角度来看，分类器仍存在潜在的改进空间。具体而言，由于目前没有可用于训练查询复杂度分类器的数据集，我们基于模型预测结果以及数据集的归纳偏置自动创建了新数据。然而，我们的标注过程只是查询复杂度标注的一种具体实例化方式，尽管其行之有效，仍有可能错误地标注查询。因此，未来的工作可以在问答对标签之外，创建带有多种多样查询复杂度标注的新数据集。此外，正如表 1 中理想分类器与图 3 中当前分类器之间的性能差距所表明的，分类器的有效性仍有提升空间。换言之，我们基于较小 LM 的分类器设计只是用于分类查询复杂度的最初、最简单的实例化方案，在此基础上，未来的工作可以改进分类器架构及其性能，这将对整体 QA 性能产生积极贡献。</p>
+<h2>Ethics Statement</h2>
+<p>Adaptive-RAG 的实验结果验证了其在现实场景中的适用性，这类场景中存在广泛多样的用户查询。尽管如此，考虑到现实世界用户输入的潜在多样性，同样必须考虑这些输入可能具有冒犯性或有害性的场景。我们应当意识到，此类输入可能导致检索到冒犯性文档，并使检索增强的大语言模型（LLM）生成不当回复。为应对这一挑战，在检索增强框架内开发用于检测和管理用户输入与检索文档中冒犯性或不当内容的方法至关重要。我们相信这是未来工作的一个关键领域。</p>
+<h2>A.1 Datasets</h2>
+<p>我们对单跳和多跳问答（QA）数据集均使用公开数据集，分别对应 Karpukhin et al. (2020) 和 Trivedi et al. (2023)。我们描述每个数据集的特性：</p>
+<h2>A.2 Models</h2>
+<p>我们描述模型的细节如下：</p>
+<figure><img src="assets/a108/figures/fig_5.png" alt="Figure 5: 不同检索增强生成方法的问答性能（F1）和效率（时间/查询）。我们使用 FLAN-T5-XXL (11B) 作为基础 LLM。" loading="lazy"></figure>
+<figcaption>Figure 5: 不同检索增强生成方法的问答性能（F1）和效率（时间/查询）。我们使用 FLAN-T5-XXL (11B) 作为基础 LLM。</figcaption>
+<p>训练大语言模型（LLM）自适应地执行检索与生成，其中一旦模型预测出高于某一阈值的特殊检索 token，便执行检索，随后进行答案生成。</p>
+<h2>A.3 Implementation Details</h2>
+<p>在计算资源方面，我们使用显存为 80GB 的 A100 GPU。此外，由于评估检索增强生成（RAG）模型会产生高昂的成本，我们的实验仅以单次运行方式进行。最后，我们使用 PyTorch（Paszke et al., 2019）和 Transformers 库（Wolf et al., 2020）实现了模型。</p>
+<h2>B Additional Experimental Results</h2>
+<p>Performance vs Time We further provide a comparison of different retrieval-augmented generation approaches with FLAN-T5-XL and FLAN-T5XXL models in Figure 4 and Figure 5, respectively, in the context of performance and efficiency tradeoffs. Similar to the observation made from the GPT3.5 model in Figure 1, our proposed Adaptive-RAG is significantly more effective as well as efficient.</p>
+<p>4 For the multi-step approach, we use the state-of-the-art question answering strategy from IRCoT (Trivedi et al., 2023).</p>
+<div class="tablewrap"><table><thead><tr><th>Data Types</th><th>Methods</th><th>SQuAD.EM</th><th>SQuAD.F1</th><th>SQuAD.Acc</th><th>SQuAD.Step</th><th>SQuAD.Time</th><th>Natural.EM</th><th>Natural.F1</th><th>Natural.Questions Acc</th><th>Natural.Step</th><th>Natural.Time</th><th>TriviaQA.EM</th><th>TriviaQA.F1</th><th>TriviaQA.Acc</th><th>TriviaQA.Step</th><th>TriviaQA.Time</th></tr></thead><tbody>
+<tr><td>Simple</td><td>No Retrieval</td><td>7.00</td><td>14.40</td><td>8.40</td><td>0.00</td><td>0.08</td><td>18.80</td><td>25.50</td><td>20.40</td><td>0.00</td><td>0.08</td><td>32.80</td><td>39.20</td><td>35.40</td><td>0.00</td><td>0.08</td></tr>
+<tr><td></td><td>Single-step Approach</td><td>28.80</td><td>40.80</td><td>35.00</td><td>1.00</td><td>1.00</td><td>41.40</td><td>51.20</td><td>47.60</td><td>1.00</td><td>1.00</td><td>56.00</td><td>64.70</td><td>61.80</td><td>1.00</td><td>1.00</td></tr>
+<tr><td></td><td>Adaptive Retrieval</td><td>15.60</td><td>25.60</td><td>20.00</td><td>0.50</td><td>0.54</td><td>31.00</td><td>39.70</td><td>35.00</td><td>0.50</td><td>0.54</td><td>44.80</td><td>52.20</td><td>48.60</td><td>0.50</td><td>0.54</td></tr>
+<tr><td>Single-step Adaptive</td><td>Self-RAG ∗</td><td>1.60</td><td>11.90</td><td>20.80</td><td>0.59</td><td>0.31</td><td>39.20</td><td>47.10</td><td>42.40</td><td>0.75</td><td>0.09</td><td>14.60</td><td>33.70</td><td>60.20</td><td>0.76</td><td>0.22</td></tr>
+<tr><td>Complex</td><td>Adaptive-RAG (Ours)</td><td>27.80</td><td>39.80</td><td>34.00</td><td>1.17</td><td>1.50</td><td>41.20</td><td>51.00</td><td>47.40</td><td>1.00</td><td>1.00</td><td>52.00</td><td>60.30</td><td>57.20</td><td>1.03</td><td>1.33</td></tr>
+<tr><td></td><td>Multi-step Approach</td><td>24.60</td><td>36.90</td><td>30.20</td><td>2.13</td><td>3.83</td><td>39.60</td><td>49.60</td><td>46.40</td><td>2.16</td><td>3.94</td><td>52.60</td><td>61.10</td><td>59.40</td><td>2.17</td><td>4.03</td></tr>
+<tr><td>Oracle</td><td>Adaptive-RAG w/ Oracle</td><td>32.80</td><td>46.90</td><td>38.20</td><td>0.85</td><td>0.94</td><td>51.20</td><td>61.00</td><td>57.00</td><td>0.71</td><td>0.91</td><td>63.40</td><td>71.30</td><td>68.20</td><td>0.51</td><td>0.60</td></tr>
+<tr><td></td><td></td><td>MuSiQue</td><td>MuSiQue</td><td>MuSiQue</td><td>MuSiQue</td><td>MuSiQue</td><td>HotpotQA</td><td>HotpotQA</td><td>HotpotQA</td><td>HotpotQA</td><td>HotpotQA</td><td>2WikiMultiHopQA</td><td>2WikiMultiHopQA</td><td>2WikiMultiHopQA</td><td>2WikiMultiHopQA</td><td>2WikiMultiHopQA</td></tr>
+<tr><td>Data Types</td><td>Methods</td><td>EM</td><td>F1</td><td>Acc</td><td>Step</td><td>Time</td><td>EM</td><td>F1</td><td>Acc</td><td>Step</td><td>Time</td><td>EM</td><td>F1</td><td>Acc</td><td>Step</td><td>Time</td></tr>
+<tr><td></td><td>No Retrieval</td><td>4.20</td><td>13.40</td><td>5.40</td><td>0.00</td><td>0.08</td><td>17.40</td><td>25.44</td><td>18.40</td><td>0.00</td><td>0.09</td><td>26.80</td><td>32.93</td><td>28.00</td><td>0.00</td><td>0.08</td></tr>
+<tr><td>Simple</td><td>Single-step Approach</td><td>16.80</td><td>25.70</td><td>19.20</td><td>1.00</td><td>1.00</td><td>37.60</td><td>49.27</td><td>39.60</td><td>1.00</td><td>1.00</td><td>46.60</td><td>54.13</td><td>48.20</td><td>1.00</td><td>1.00</td></tr>
+<tr><td></td><td>Adaptive Retrieval</td><td>8.40</td><td>17.80</td><td>10.20</td><td>0.50</td><td>0.54</td><td>26.60</td><td>36.01</td><td>27.80</td><td>0.50</td><td>0.54</td><td>35.20</td><td>42.68</td><td>36.80</td><td>0.50</td><td>0.54</td></tr>
+<tr><td>Multi-step Adaptive</td><td>Self-RAG ∗</td><td>1.20</td><td>8.20</td><td>11.80</td><td>0.68</td><td>0.27</td><td>5.60</td><td>17.86</td><td>30.60</td><td>0.76</td><td>0.26</td><td>3.00</td><td>19.14</td><td>39.00</td><td>0.90</td><td>0.25</td></tr>
+<tr><td></td><td>Adaptive-RAG (Ours)</td><td>20.60</td><td>28.50</td><td>23.20</td><td>1.89</td><td>3.12</td><td>44.20</td><td>54.78</td><td>46.80</td><td>1.58</td><td>2.53</td><td>47.60</td><td>57.36</td><td>54.00</td><td>1.46</td><td>2.55</td></tr>
+<tr><td>Complex</td><td>Multi-step Approach</td><td>19.40</td><td>27.50</td><td>21.80</td><td>2.09</td><td>3.66</td><td>47.00</td><td>57.81</td><td>49.40</td><td>2.08</td><td>3.73</td><td>57.60</td><td>67.65</td><td>64.00</td><td>2.17</td><td>3.63</td></tr>
+<tr><td>Oracle</td><td>Adaptive-RAG w/ Oracle</td><td>24.20</td><td>37.20</td><td>26.60</td><td>1.22</td><td>1.71</td><td>52.20</td><td>64.80</td><td>54.60</td><td>0.92</td><td>1.33</td><td>59.20</td><td>70.40</td><td>68.60</td><td>0.82</td><td>1.14</td></tr>
+</tbody></table></div>
+<p>| Data Types           | Methods                | SQuAD.EM   | SQuAD.F1   | SQuAD.Acc   | SQuAD.Step   | SQuAD.Time   | Natural.EM   | Natural.F1   | Natural.Questions Acc   | Natural.Step   | Natural.Time   | TriviaQA.EM     | TriviaQA.F1     | TriviaQA.Acc    | TriviaQA.Step   | TriviaQA.Time   |</p>
+<figcaption>Table 7: 以 FLAN-T5-XXL (11B) 作为 LLM 时，在各数据集集合中每个数据集上的结果。我们将我们的结果加粗显示。</figcaption>
+<div class="tablewrap"><table><thead><tr><th>Data</th><th>Types</th><th>Methods</th><th>SQuAD.EM</th><th>SQuAD.F1</th><th>SQuAD.Acc</th><th>SQuAD.Step</th><th>SQuAD.Time</th><th>Natural Questions.EM</th><th>Natural Questions.F1</th><th>Natural Questions.Acc</th><th>Natural Questions.Step</th><th>Natural Questions.Time</th><th>TriviaQA.EM</th><th>TriviaQA.F1</th><th>TriviaQA.Acc</th><th>TriviaQA.Step</th><th>TriviaQA.Time</th></tr></thead><tbody>
+<tr><td>Single-step</td><td>Simple</td><td>No Retrieval Single-step Approach</td><td>16.00 18.00</td><td>29.20 33.80</td><td>23.80 29.20</td><td>0.00 1.00</td><td>0.62 1.00</td><td>39.80 32.40</td><td>55.70 46.80</td><td>55.00 54.80</td><td>0.00 1.00</td><td>0.56 1.00</td><td>64.00 55.20</td><td>75.60 66.50</td><td>75.80 65.80</td><td>0.00 1.00</td><td>0.68 1.00</td></tr>
+<tr><td></td><td></td><td>Adaptive Retrieval</td><td>15.40</td><td>30.00</td><td>24.40</td><td>0.50</td><td>0.81</td><td>36.40</td><td>51.20</td><td>56.60</td><td>0.50</td><td>0.78</td><td>62.00</td><td>71.90</td><td>72.20</td><td>0.50</td><td>0.84</td></tr>
+<tr><td></td><td>Adaptive</td><td>Self-RAG ∗</td><td>1.60</td><td>11.90</td><td>20.80</td><td>0.59</td><td>1.91</td><td>39.20</td><td>47.10</td><td>42.40</td><td>0.75</td><td>0.52</td><td>14.60</td><td>33.70</td><td>60.20</td><td>0.76</td><td>1.59</td></tr>
+<tr><td></td><td></td><td>Adaptive-RAG (Ours)</td><td>19.80</td><td>34.40</td><td>30.00</td><td>0.87</td><td>1.21</td><td>36.80</td><td>52.00</td><td>56.60</td><td>0.68</td><td>0.86</td><td>62.40</td><td>73.80</td><td>73.80</td><td>0.22</td><td>0.79</td></tr>
+<tr><td></td><td>Complex</td><td>Multi-step Approach</td><td>17.40</td><td>31.50</td><td>26.20</td><td>2.50</td><td>3.24</td><td>35.60</td><td>49.70</td><td>57.80</td><td>2.58</td><td>3.79</td><td>54.80</td><td>67.10</td><td>68.00</td><td>2.30</td><td>2.65</td></tr>
+<tr><td></td><td>Oracle</td><td>Adaptive-RAG w/ Oracle</td><td>28.00</td><td>45.90</td><td>39.40</td><td>0.54</td><td>0.93</td><td>50.00</td><td>65.40</td><td>67.00</td><td>0.28</td><td>0.8</td><td>70.80</td><td>81.00</td><td>80.00</td><td>0.11</td><td>0.73</td></tr>
+</tbody></table></div>
+<p>| Data        | Types    | Methods                           | SQuAD.EM    | SQuAD.F1    | SQuAD.Acc   | SQuAD.Step   | SQuAD.Time   | Natural Questions.EM   | Natural Questions.F1   | Natural Questions.Acc   | Natural Questions.Step   | Natural Questions.Time   | TriviaQA.EM   | TriviaQA.F1   | TriviaQA.Acc   | TriviaQA.Step   | TriviaQA.Time   |</p>
+<figcaption>Table 8: 以 GPT-3.5 (Turbo) 作为 LLM 时，在各数据集集合中每个数据集上的结果。我们将我们的结果加粗显示。</figcaption>
+<p>MuSiQue HotpotQA</p>
+<p>Data Types Methods EM</p>
+<p>Acc Step Time</p>
+<p>Adaptive No Retrieval</p>
+<p>20.40</p>
+<p>31.30</p>
+<p>0.81</p>
+<p>37.40</p>
+<p>51.04</p>
+<p>0.74</p>
+<p>37.00</p>
+<p>48.50</p>
+<p>43.40</p>
+<p>16.40</p>
+<p>26.70</p>
+<p>39.60</p>
+<p>50.44</p>
+<p>46.80</p>
+<p>57.69</p>
+<p>52.60</p>
+<p>18.80</p>
+<p>30.30</p>
+<p>50.70</p>
+<p>0.87</p>
+<p>55.11</p>
+<p>50.60</p>
+<p>0.95</p>
+<p>1.20</p>
+<p>8.20</p>
+<p>11.80</p>
+<p>1.66</p>
+<p>5.60</p>
+<p>17.86</p>
+<p>30.60</p>
+<p>0.76</p>
+<p>1.67</p>
+<p>3.00</p>
+<p>19.14</p>
+<p>1.81</p>
+<p>21.80</p>
+<p>32.60</p>
+<p>1.90</p>
+<p>2.29</p>
+<p>40.40</p>
+<p>52.56</p>
+<p>1.48</p>
+<p>46.60</p>
+<p>60.09</p>
+<p>56.80</p>
+<p>2.23</p>
+<p>Complex Multi-step Approach</p>
+<p>32.50</p>
+<p>31.60</p>
+<p>3.41</p>
+<p>3.61</p>
+<p>45.80</p>
+<p>58.36</p>
+<p>2.73</p>
+<p>3.18</p>
+<p>66.08</p>
+<p>3.36</p>
+<p>3.35</p>
+<p>Oracle Adaptive-RAG w/ Oracle</p>
+<p>44.70</p>
+<p>1.45</p>
+<p>55.60</p>
+<p>62.80</p>
+<p>0.54</p>
+<p>1.08</p>
+<p>66.60</p>
+<p>1.21</p>
+<p>Performance per Dataset In addition to detailing the performance of each dataset with the FLANT5-XL model, as shown in Table 2, we also present the results for each dataset with the FLAN-T5XXL and GPT-3.5 models in Table 2 and Table 8, respectively. The experimental results show that our Adaptive-RAG consistently balances between efficiency and accuracy. It is worth noting that while the GPT-3.5 model performs effectively in addressing straightforward queries even without document retrieval, it benefits significantly from our Adaptive-RAG in terms of effectiveness when solving complex multi-hop queries.</p></div></div></body></html>

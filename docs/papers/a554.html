@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>探究 LLM 在长文本问答（LFQA）任务中的可答性</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Investigating Answerability of LLMs for Long-Form Question Answering</h1>
+<p class="lead">探究 LLM 在长文本问答（LFQA）任务中的可答性</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">评测基准</span><span class="chip">上下文窗口</span><span class="chip">提示技术</span><span class="chip">可靠性与安全</span><span class="chip">人机协作</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a554.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文研究长文本问答（LFQA）场景下 ChatGPT 等大型 LLM 与 Llama、Alpaca 等开源小模型及其蒸馏版的能力差距。方法上提出可扩展的评测构造：先用 ChatGPT 对 Wikipedia 九个领域的长文档分段做摘要，再从摘要生成按复杂度排序的 top-3 追问（QG-Summary），并以直接从原文生成问题（QG-Passage）作 baseline；答案由各模型 zero-shot 生成，用 GPT-4 按 coherence、relevance、factual consistency、accuracy 四维 0-3 分评分，并通过 TruthfulQA 代理测试（&gt;90% 偏好人类答案）与 50 条人工标注验证 judge 可靠性。关键结论：ChatGPT 全面领先第二名 Alpaca-13B 达 22.4%-40.1%；所有模型在 QG-Summary 上表现更差，开源模型对上下文的依赖下降且在 &gt;1024 tokens 后加速退化，而 ChatGPT 在 2k tokens 内保持稳健。其&#x27;摘要→追问&#x27;的评测集构造与 LLM-as-judge 校验流程可直接借鉴到团队的知识库问答评测体系建设。</p>
+<h2>问题</h2><p>现有 QA 基准多为短答案、短上下文，难以刻画 LLM 在长文本问答（LFQA）上跨段落推理的能力；同时人工评测长文本自由答案昂贵且难以扩展。论文要解决的问题是：构建一种可扩展的评测方法，系统刻画 massive LLM（ChatGPT）与较小的开源 LLM（Llama-7B/13B）及其蒸馏版（Alpaca-7B/13B）在 LFQA 上的能力差距与局限。</p>
+<h2>方法</h2><p>两步问题生成：(1) 用 ChatGPT（gpt-turbo-3.5）对 Wikipedia 九个领域（物理、娱乐、历史、计算机科学等）的长文档分段做摘要，prompt 中附带文章标题与领域信息作为上下文；(2) 以摘要为上下文，让 ChatGPT 生成按复杂度降序排列的 top-3 追问（QG-Summary），并以相同指令直接从原文生成问题作为 baseline（QG-Passage）。每个领域 50 篇 × 3 问，共 1350 问/设置，经 ChatGPT 在多个 top_p 下多数投票过滤不可答问题后剩 1278 问。答案生成采用 zero-shot（上下文上限 2k tokens），对比 ChatGPT、Alpaca-7B/13B、Llama-7B/13B；评测采用 GPT-4 作为 judge，按 coherence/relevance/factual consistency/accuracy 四指标 0-3 打分，prompt 中加入避免位置偏差的指令，并通过 TruthfulQA 代理测试与 50 条双标注者人工评估验证评测 prompt 的可靠性。</p>
+<h2>关键结果</h2><p> ChatGPT 在全部四项指标上大幅领先第二名 Alpaca-13B，领先幅度 22.4%-40.1%</p><p> 所有模型（含 ChatGPT）在 QG-Summary 上的 accuracy 与 relevance 均低于 QG-Passage，开源模型差距更大；模型对上下文的依赖差距在 QG-Summary 更大（平均差距 0.2 vs QG-Passage 的 0.12）</p><p> Alpaca-7B/13B 在 QG-Passage 设置下无上下文反而表现更好；蒸馏模型在 1024 tokens 内表现稳定，但超过 &gt;1024 tokens 后性能退化速度高于 Llama，而 ChatGPT 在 2k tokens 内保持稳健</p><p> GPT-4 评测 prompt 在 TruthfulQA 代理测试（随机 50 条）中超过 90% 的情况在 factual consistency 与 correctness 上偏好人类撰写的答案；50 条人工标注与 GPT-4 评分在各项指标上具有高一致性</p><p> Alpaca 生成的问题超过 80% 不可答（上下文中不存在）或为乱码，无法作为开源问题生成 baseline</p><p> 每个设置生成 1350 个问题（9 领域 × 50 篇 × 3 问），过滤后保留 1278 个</p>
+<h2>创新点</h2><p>区别于以往依赖短答案 QA 基准（SQuAD、HotpotQA）与 ROUGE/BLEU 等自动指标的工作，本文提出从抽象摘要生成追问（QG-Summary）作为可扩展的 LFQA 压力测试构造，迫使模型综合长文档多个部分的信息作答；同时采用经 TruthfulQA 代理测试与人工一致性双重验证的 GPT-4-as-judge 多维评分来评测自由文本长答案，并系统刻画了开源小模型及其蒸馏版在长上下文下的退化行为。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.5 评测与可靠使用 | 3.1 上下文工程与记忆</p><p><b>理由：</b>直接命中 3.5 评测与可靠使用：论文核心贡献是一套 LLM 应用评测方法——用 GPT-4 作为 judge 对长文本自由答案做四维评分，设计带偏差控制指令的评测 prompt，并通过 TruthfulQA 代理测试与小规模人工标注一致性校验 judge 的可靠性，这套&#x27;LLM-as-judge + 人工校验&#x27;流程可复用于团队的知识库问答/文档问答评测体系建设。同时命中 3.1 上下文工程与记忆：论文实证了上下文长度（&gt;1024 tokens）对开源小模型答案质量的显著影响，并提出&#x27;何时该/不该附加上下文&#x27;的问题（小模型在 QG-Passage 无上下文反而更好），对团队组织 RAG 检索内容与长上下文策略有直接参考价值。论文不涉及 Agent 架构、工具调用与多智能体协作，与 3.3/3.4 无关；提示设计仅为工具性使用，非 3.2 的核心研究对象。</p><p><b>建议动作：</b>作为方法参考存档</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

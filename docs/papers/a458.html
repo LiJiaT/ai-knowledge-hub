@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Automate-CoT：从标注数据中进行思维链（CoT）提示的自动增强与选择</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Automatic Prompt Augmentation and Selection with Chain-of-Thought from Labeled Data</h1>
+<p class="lead">Automate-CoT：从标注数据中进行思维链（CoT）提示的自动增强与选择</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">自动提示优化</span><span class="chip">思维链与推理</span><span class="chip">上下文窗口</span><span class="chip">成本与效率</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a458.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>Manual-CoT 等思维链提示依赖人工精心编写的推理链示例，且示例的顺序、复杂度、多样性与语言风格都会显著影响效果（不同标注者可造成高达 28.2% 的准确率差异），人工适配新任务成本很高。论文提出 Automate-CoT 三步流水线：先由 LLM 对有标注的问题自动生成多条伪推理链，再依据生成答案与 ground-truth 的一致性剪枝保留高质量示例，最后用方差缩减策略梯度估计（VR-PGE）以黑盒方式优化隐变量，从候选池中自动选出最优的 4-8 条 CoT 示例组合。在 text-davinci-002、code-davinci-002 与 gpt-3.5-turbo 上，方法在算术、常识、符号推理及非推理任务上分别取得 +2.7%、+3.4%、+3.2%、+2.5% 的提升，并优于 Auto-CoT、BM25 检索、K-Means 聚类与 PromptPG 等示例选择方法。成本分析显示其优化开销约 $4.7，比 fine-tuning（约 $57.6）低 12 倍，且仅需 100 条标注样本。对团队而言，这是一套可直接借鉴的&#x27;从标注数据自动构建与优选 CoT 提示&#x27;的工程化方案。</p>
+<h2>问题</h2><p>人工编写的 CoT 示例成本高且难以迁移到新任务：不仅需要挑选问题、设计推理步骤，还受四个敏感性因素困扰——示例顺序（GSM8K 上打乱顺序最低可到 59.8%，比平均 63.1% 低 3.3%）、推理链复杂度（步数）、不同复杂度示例的组合多样性、以及语言风格（不同标注者可造成高达 28.2% 的准确率差异）。论文目标是给出一种自动、任务无关的流程，在只有问答标注、没有人工推理链的数据上自动构建并优选 CoT 提示。</p>
+<h2>方法</h2><p>Automate-CoT 三步流水线： 用 LLM 对每个问题自动生成多条伪推理链（可完全零样本，仅加 &#x27;Let&#x27;s think step by step.&#x27;，m=0 时也能工作）； 依据&#x27;生成正确推理是生成正确答案的必要条件&#x27;这一假设，按生成答案与 ground-truth 的一致性剪掉错误链，构建约 100 条高质量示例池； 将示例选择建模为带隐变量（每个示例位置上的类别分布 p_i）的监督优化，因商业 API 不可获取梯度，采用方差缩减策略梯度估计（VR-PGE）配合投影随机梯度下降（AdamW，5 epochs，学习率 1e-3，batch size 10），利用 API 返回的 logprobs 计算答案 token 的交叉熵损失，最终取验证集准确率最高的示例组合用于推理。</p>
+<h2>关键结果</h2><p> text-davinci-002 上平均超过 Manual-CoT 2.6%、超过 self-consistency (SC) 3.7%；code-davinci-002 上分别超过 2.7% 与 2.2%</p><p> 整体提升：算术推理 +2.7%、常识推理 +3.4%、符号推理 +3.2%、非推理任务 +2.5%；GSM8K 上超过 Auto-CoT 4.8%</p><p> gpt-3.5-turbo 上：算术 +2.8%、常识 +3.9%、符号 +3.2%、整体 +2.8%；平均比 BM25 检索高 3.8%、比 K-Means 聚类高 2.6%，并优于 PromptPG</p><p> 候选池需达到 20 条及以上才能超过 Manual-CoT，性能随池增大持续提升（附加实验最大池为 150）</p><p> 风格消融中，Automate-CoT 能从 16 条好/坏风格混合的示例中正确选回原始 8 条，选中示例比未选中者高 2%</p><p> 成本对比：gpt-3.5-turbo 下 Automate-CoT 优化开销约 $4.7，fine-tuning 约 $57.6（12 倍差距），且 fine-tuned 模型后续推理单价高 8 倍；Automate-CoT 仅需 100 条训练样本，而 fine-tuning 需约 8000 条</p><p> 零样本设置（仅加 &#x27;Let&#x27;s think step by step.&#x27;）下结果可比甚至略超 Manual-CoT 与 Auto-CoT；GSM8K 上加 tricks 后达 69.8%（+2.2%），self-consistency 下 83.0%（+0.6%）</p>
+<h2>创新点</h2><p>相比依赖固定人工示例的 Manual-CoT/SC、基于聚类的 Auto-CoT、基于检索的 BM25 与基于强化学习的 PromptPG，Automate-CoT 把&#x27;生成—按标签一致性剪枝—黑盒选择&#x27;统一为全自动流水线，并显式针对顺序、复杂度、多样性、风格四类敏感性进行优化（如自动达成 complexity-diversity trade-off）；同时 VR-PGE 只需 API 返回的 logprobs 即可优化离散示例选择，适用于不开放梯度的黑盒商业模型，而此前的 black-box prompt learning 方法受限于零样本分类任务、推理能力不足。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程 | 3.1 上下文工程与记忆</p><p><b>理由：</b>直接命中 3.2 提示工程的核心技术：自动提示优化、CoT/推理提示与 in-context 示例选择，并系统量化了顺序/复杂度/多样性/风格四类提示敏感性——这正是团队做提示设计与提示词资产管理时日常面对的问题；示例在有限上下文窗口（论文中 GPT-3 为 2,048）内的自动优选也触及 3.1 的上下文组织与管理。方法只需标注问答对与 API 返回的 logprobs，不涉及模型训练，与团队&#x27;用好模型而非训练模型&#x27;的定位完全吻合。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p><h2>证据核查</h2><p class='muted'>1 条证据未在原文中核对到</p></div></div></body></html>

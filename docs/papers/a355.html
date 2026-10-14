@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>距崩溃仅一个 Token：指令微调（Instruction-Tuned）有用性的脆弱性</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>One Token Away from Collapse: The Fragility of Instruction-Tuned Helpfulness</h1>
+<p class="lead">距崩溃仅一个 Token：指令微调（Instruction-Tuned）有用性的脆弱性</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">评测基准</span><span class="chip">可靠性与安全</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a355.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文挑战“instruction tuning 教会模型可泛化有用性”的假设：仅在提示中追加一条琐碎词法约束（如禁用逗号或 &#x27;the&#x27;），就使 7 个指令微调模型（7B-70B，含 GPT-4o-mini）的回答 comprehensiveness 下降 14-48%，而 base 模型几乎不受影响。作者用 40 提示 × 8 约束做位置随机化的 pairwise 比较（3 个 LLM judge），并以 10 名盲测人类评估者和长度不变的原子声明覆盖率分析（约束回答仅保留 49.8% 的 baseline 事实声明）确认是真实语义损失而非长度偏好伪影。诊断表明这是规划失败而非能力缺陷：two-pass 先生成再重写可恢复 59-96% 长度，线性探针能在生成开始前从 prompt 表征预测响应长度（R²=0.51-0.94），且 base 模型无此表征签名。对团队最关键的两点结论：企业级部署约束（专业语气、禁 preamble、合规 hedging）造成 -22%~-34% 的同类退化；独立打分式 LLM-as-judge 仅检测到 3.5% 的质量下降，而 pairwise 评测揭示 23%，存在 6.7× 的评测方法论盲区。</p>
+<h2>问题</h2><p>检验 instruction tuning 是否真的赋予模型“可泛化的有用性”：当提示中加入琐碎的表面形式约束（禁用某标点、格式模式或常用词）时，指令微调模型能否在成功遵循约束的同时保持回答的全面性与信息量；定位崩溃的来源（instruction tuning 还是语言模型本身）与机制（能力缺陷还是规划失败），并检验主流独立打分式 LLM-as-judge 评测能否察觉这种质量损失。</p>
+<h2>方法</h2><p>构建 40 个提示（4 类）× 8 种词法约束（标点级/模式级/词级）+ 2 种组合约束，约束以自然语言句子追加到提示末尾，输出仍为自由格式文本（非结构化输出问题）；评估 7 个指令微调模型与 3 个对应 base 模型，采用三种评测协议：独立打分、位置随机化的 pairwise 比较（GPT-4o-mini/GPT-4o/Claude Sonnet 4.6 三个 judge）、10 名 STEM 评估者的盲测人类评估（6 维度，区分信息类与表面类标准）。诊断手段包括：two-pass 重写实验（先生成再在约束下重写）、对 last prompt token 隐状态的 Ridge 线性探针预测响应长度、token 级 JSD 散度分析、以 base 模型困惑度排除 OOD 假设、长度不变的原子事实声明覆盖率分析；另测 4 种企业级部署约束（professional tone、no preamble、hedging、plain language）。</p>
+<h2>关键结果</h2><p> 词法约束使 7 个指令微调模型的 comprehensiveness 下降 14-48%（pairwise），unconstrained baseline 胜率 77-100%；Qwen 最脆弱（-39.9%~-48.1%），Mistral 最稳健（-14.2%~-17.4%）</p><p> 禁用逗号使 Llama-3.1-8B-Instruct 下降 27.0%、Qwen-2.5-7B-Instruct 下降 60.9%；禁用 &#x27;the&#x27; 造成同等损害（Llama -22.6%、Qwen -42.1%），说明脆弱性与 token 频率和模板破坏相关而非格式本身</p><p> 规模与架构无济于事：Llama-3.3-70B 崩溃更重（-34.7% vs 8B 的 -25.9%），闭源 GPT-4o-mini 损失 31.0%，全开源 OLMo-3-7B 损失 37.7%</p><p> 盲测人类评估（10 人、960 对、5760 个评分）显示信息类标准下降幅度是表面类标准的 1.5-2.3 倍；约束回答平均仅保留 baseline 49.8% 的原子事实声明</p><p> two-pass 重写恢复 59-96% 响应长度（Llama/Mistral 达 91-96%）；线性探针在生成前即可从 prompt 表征预测响应长度（R²=0.51-0.94，与崩溃严重度相关 r=0.92），base 模型所有层 R² 为负</p><p> base 模型在同样约束下效应微弱且不一致（胜率 45-59%，接近随机）；同一 Qwen-2.5-7B 架构经 instruction tuning 后从 +7.1% 变为 -48.1%（55 个百分点摆动）</p><p> 企业级部署约束造成 -22.5%（Llama）/-34.4%（Qwen）退化；仅禁用开场白（&#x27;Certainly!&#x27; 类）就使 Qwen 损失 40.4% comprehensiveness 与 74.7% 词数（448→113 词）</p><p> 独立打分仅检测到 3.5% 的平均质量下降，而 pairwise 揭示 23.4%，差距 6.7×；no-bullet 约束下独立打分检测到零退化而 pairwise 为 12.9%</p><p> 约束满足率大多 &gt;90%，说明崩溃发生在成功遵循约束的回答之中；MT-Bench 复现结果一致（Qwen -40.5%，Llama -17.2%）</p>
+<h2>创新点</h2><p>相对已有工作的区别：(i) 约束是词法级（token 禁用）而非结构化输出格式限制，输出仍是自由文本；(ii) 效应量更大（14-48% vs 结构化 format tax 的 5-15%）；(iii) 发现闭源模型并不能免于词法约束崩溃（GPT-4o-mini -31%），与 Lee et al. (2026) 关于闭源模型抵抗 format tax 的结论相反；(iv) 与 IFEval 等约束满足基准正交——测量的是模型成功满足约束后回答质量的坍塌；(v) 提供先前 format tax 工作没有的诊断分析：规划失败判定、表征签名（探针 R²）、base-vs-instruct 对照、困惑度排除 OOD 假设；(vi) 揭示独立打分 vs pairwise 评测的 6.7× 方法论盲区，并给出面向部署约束（而非人工约束）的实证。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程 | 3.5 评测与可靠使用</p><p><b>理由：</b>直接命中 3.5（评测与可靠使用）与 3.2（提示工程）。对 3.5：论文核心贡献之一是证明独立打分式 LLM-as-judge 在受约束生成场景下系统性低估质量损失 6.7×，并推荐 pairwise 评测——这是团队建立 LLM 应用评测体系时必须吸收的方法论结论；企业级约束（语气、preamble、合规 hedging）导致 -22%~-34% 退化，属于生产环境可靠使用与 AI 辅助工程实证研究的范畴。对 3.2：团队在 system prompt 中追加格式/语气/合规约束是日常做法，论文证明这类看似无害的约束可能经模板依赖触发隐性质量坍塌，直接影响提示设计与约束取舍。论文不涉及模型训练，与团队“用好模型而非训练模型”的定位完全一致。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

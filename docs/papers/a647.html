@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基于约束生成的离散提示优化：面向零样本 Re-ranker</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Discrete Prompt Optimization via Constrained Generation for Zero-shot Re-ranker</h1>
+<p class="lead">基于约束生成的离散提示优化：面向零样本 Re-ranker</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">自动提示优化</span><span class="chip">提示技术</span><span class="chip">RAG与检索</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a647.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>LLM 作为零样本 re-ranker 对提示高度敏感，但此前针对 re-ranking 这类需要连续相关性分数输出的任务缺乏自动提示优化方法，人工搜索提示成本高且迁移性差。论文提出 Co-Prompt：把最优提示搜索转化为带约束的从左到右离散提示生成，用零样本 re-ranker 本身作 discriminator 计算提示最优性似然度量（采样文档-查询对上相关性分数的期望），用 decoder-only PLM 作 generator 采样高先验提示 token，经 beam search 迭代完成候选生成与评估，全程无需参数更新。在 T0/OPT 两种 LLM、MS-MARCO/NQ 两个数据集、BM25/DPR 两种检索器的全部组合中，Co-Prompt 一致优于 Manual Prompt、RL-Prompt、P-Tuning 等基线，且生成的提示人类可读、包含任务关键词 &#x27;question&#x27;。对团队而言，这是&#x27;用任务度量驱动的免训练自动提示优化&#x27;的可直接借鉴范式，尤其适用于 RAG 重排环节的提示调优与提示词资产管理。</p>
+<h2>问题</h2><p>LLM 作为零样本 re-ranker（按与 query 的相关性分数对检索文档重排）性能高度依赖提示，但针对零样本 re-ranker 的提示影响与优化此前未被研究；人工搜索离散提示既昂贵又在迁移性上次优；已有自动离散提示优化方法主要面向文本分类或 mask-filling 任务，无法直接适用于 re-ranking 这类需要连续相关性分数的开放生成任务。</p>
+<h2>方法</h2><p>提出 Co-Prompt，将最优提示搜索形式化为基于 discriminator 的约束生成（依据 Bayes 规则），包含两个模块：(1) discriminator——复用零样本 re-ranker 本身，计算提示序列的最优性度量，即在采样出的文档-查询对数据集 D_s 上相关性分数的期望似然 P_M(D_s|ρ)；(2) generator——任意 decoder-only PLM，以零样本方式采样具有高先验概率的提示 token，从而限制 discriminator 需评估的候选空间。两模块迭代执行候选生成与评估，采用 beam search 解码（beam width=10、最大提示长度=10、起始 token 为 &#x27;Please&#x27;），全程不更新任何模型参数。另探讨了对比式度量作为可选似然。</p>
+<h2>关键结果</h2><p> 在 T0 与 OPT 两种 LLM、MS-MARCO 与 NQ 两个数据集、BM25 与 DPR 两种检索器的全部组合上，Co-Prompt 在 ACC@20/ACC@100 等指标上一致优于 Null Prompt、P-Tuning、RL-Prompt、Manual Prompt 四个基线（正文称在所有场景均取得稳健提升，具体数值见表格、正文未列出）</p><p> 在 Top-20 与 Top-100 的详细评测中，Co-Prompt 在所有实验的全部指标上均排名第 1 或第 2；针对 NQ 优化的 Manual Prompt 在 MS-MARCO 上表现较差，RL-Prompt 与 P-Tuning 在所有实验中均未取得最优</p><p> 无论起始 token 取 &#x27;Please&#x27;、&#x27;Score&#x27; 还是 &#x27;This&#x27;，Co-Prompt 都能一致生成高效提示，但为数据集找到合适的起始 token 对取得更好结果很重要</p><p> 基础度量在各数据集与 LLM 上均有稳定表现，而对比式度量在 MS-MARCO 上表现较差</p><p> Co-Prompt 生成的提示包含描述任务的关键词 &#x27;question&#x27;，比 RL-Prompt 产出的不可读乱码提示更符合人类语言模式、更可解释</p>
+<h2>创新点</h2><p>与已有工作的区别：(1) 已有离散提示优化方法（如 RL-Prompt）需通过强化学习训练策略网络且产出不可读的乱码提示，P-Tuning 产出连续 soft prompt；Co-Prompt 无需任何参数更新或训练，通过 discriminator 引导的约束生成直接搜索离散提示；(2) 已有优化方法主要考虑文本分类或 mask-filling 任务，本文首次针对 re-ranking 这类需要连续相关性分数的任务定义了提示最优性度量（文档-查询相关性分数期望）；(3) 生成的提示符合人类语言模式，可作为理解黑盒模型的自然用户界面。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程 | 3.1 上下文工程与记忆</p><p><b>理由：</b>论文直接命中 3.2 提示工程中明确列出的&#x27;自动提示优化&#x27;核心技术：提出免训练的离散提示自动搜索方法，并给出可操作的提示最优性度量定义；其应用场景（零样本 re-ranker 重排检索文档）位于 RAG/检索增强链路，与 3.1 的 RAG 与检索增强直接相关。团队不训练模型、专注把模型用好，Co-Prompt 的&#x27;任务度量驱动、无参数更新的提示搜索&#x27;范式与团队定位完全吻合，且代码已开源、算力门槛低（V100 32GB），可作为 RAG 重排与提示词资产管理环节的方法参考。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

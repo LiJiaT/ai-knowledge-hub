@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>探索 Chain-of-Thought 风格提示在 Text-to-SQL 中的应用</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Exploring Chain-of-Thought Style Prompting for Text-to-SQL</h1>
+<p class="lead">探索 Chain-of-Thought 风格提示在 Text-to-SQL 中的应用</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">思维链与推理</span><span class="chip">上下文窗口</span><span class="chip">评测基准</span><span class="chip">代码生成Agent</span><span class="chip">成本与效率</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a639.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>该论文研究如何用 Chain-of-Thought（CoT）风格提示提升 LLM 在 Text-to-SQL 解析上的多步推理能力。作者先将 chain-of-thought 提示与 least-to-most 提示适配到该任务，再提出 question decomposition prompting（QDecomp）及其变体 QDecomp+InterCOL：让模型在单次生成中先分解子问题、并在每个子问题旁标注涉及的表/列名，最后一次性输出 SQL。在 Spider 开发集与 Spider Realistic 上，QDecomp+InterCOL 相比无推理步骤的标准提示分别取得 5.2 与 6.5 点绝对提升，相比 least-to-most 取得 2.4 与 1.5 点提升；使用 extra-hard 示例时执行准确率达 78.2%，接近微调模型 RASAT+PICARD。关键结论是：迭代式提示并非必要，过细的推理步骤反而会加剧 error propagation。这些发现对团队的提示设计、few-shot 示例工程与评测方法选择有直接参考价值。</p>
+<h2>问题</h2><p>LLM 的 in-context learning 在 Text-to-SQL 解析任务上性能仍有较大提升空间。作者假设多步推理能力是关键短板，并系统研究两个问题：(RQ1) 一次性生成全部推理步骤与迭代式提示求解哪种更好；(RQ2) 更详细的推理步骤是否带来更好的 Text-to-SQL 结果。</p>
+<h2>方法</h2><p>将 chain-of-thought 提示适配到 Text-to-SQL（参照 SQL 子句的逻辑执行顺序，用自然语言模板把每个子句构造成推理步骤）；将 least-to-most 提示适配为两阶段（问题分解 problem reduction + 逐个子问题迭代求解 problem solving）。在此基础上提出 QDecomp：像 CoT 一样单次生成，但把推理步骤改为对原问题的子问题分解；其变体 QDecomp+InterCOL 在每个子问题处增量标注涉及的表/列名，以缓解 schema grounding（table/column linking）问题。实验使用 Codex（code-davinci-002）、8-shot、API Docs 提示格式与 test-suite execution accuracy 评测，并系统考察 in-context 示例选择（随机 vs 按难度 G1/G2/G3）、示例数量与提示格式（API Docs vs Create Table + Select 3）的影响。</p>
+<h2>关键结果</h2><p> QDecomp+InterCOL 在 Spider 开发集和 Spider Realistic 上分别取得 68.4% 和 56.5% 的 test-suite 准确率，比标准提示高 5.2 和 6.5 个绝对点，比 least-to-most 高 2.4 和 1.5 个绝对点</p><p> 使用 extra-hard（G3）示例时，QDecomp+InterCOL 执行准确率达 78.2%，与微调的 RASAT+PICARD 相当；least-to-most 仅 73.8%，且 test-suite 准确率反而降至 63.3%</p><p> chain-of-thought 提示（Spider 开发集 56.8%）甚至低于标准提示，least-to-most 为 66.0%</p><p> 组件匹配分析显示 QDecomp 与 QDecomp+InterCOL 在全部五个 SQL 组件（SELECT、WHERE、GROUP BY、ORDER BY、KEYWORDS）上优于其他 CoT 风格方法</p><p> API Docs 格式与 Create Table + Select 3 格式性能相当（4-shot）：后者对标准提示仅带来可忽略提升，对 QDecomp 与 QDecomp+InterCOL 甚至略有下降</p><p> 示例数量增至 8 个后继续增加仅带来微小收益；QDecomp(+InterCOL) 在 GeoQuery、IMDB、Yelp 三个单域数据集上均取得最佳结果</p>
+<h2>创新点</h2><p>据论文所述，这是对 CoT 风格提示在 Text-to-SQL 上应用的首次系统探索。核心区别在于提出 QDecomp，将 least-to-most 的问题分解与 CoT 的单次生成结合，用实验证明迭代提示不必要、过细推理步骤会加剧 error propagation；QDecomp+InterCOL 进一步通过在子问题中增量标注表/列名缓解 schema linking。与 DIN-SQL（需迭代提示）和 LEVER（需在完整训练集上微调 verifier）不同，该方法无需迭代调用或额外训练即可取得可比或更优的结果。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程 | 3.1 上下文工程与记忆 | 3.5 评测与可靠使用</p><p><b>理由：</b>论文主体是提示技术与模式的系统实证研究（CoT 变体对比、问题分解提示、error propagation 分析），直接命中 3.2 提示工程；对 in-context 示例数量/选择策略/格式以及 schema 序列化方式（API Docs 短格式 vs Create Table 长格式）的实验属于结构化上下文组织，对应 3.1；对 test-suite execution accuracy 优于标准执行准确率的论证、以及提示设计鲁棒性指南与成本对比（单次生成 vs 迭代调用的计算开销）对应 3.5。Text-to-SQL 是团队构建数据库问答/代码生成类自动化工具的代表性场景，其&#x27;单次分解优于多轮迭代&#x27;&#x27;过细推理步骤加剧错误传播&#x27;的结论可直接迁移到团队的提示设计实践。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p><h2>证据核查</h2><p class='muted'>1 条证据未在原文中核对到</p></div></div></body></html>

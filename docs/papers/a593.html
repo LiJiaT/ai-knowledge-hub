@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tab-CoT：零样本表格化思维链（Tabular Chain of Thought）</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Tab-CoT: Zero-shot Tabular Chain of Thought</h1>
+<p class="lead">Tab-CoT：零样本表格化思维链（Tabular Chain of Thought）</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">思维链与推理</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a593.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>该论文针对 zero-shot 场景下难以给 CoT 推理注入显式结构的问题，提出 Tab-CoT：在问题后附加 &#x27;|step|subquestion|process|result|&#x27; 这样的表头作为提示，让 LLM 以逐行填表的方式生成二维结构的推理过程，再用 &#x27;the answer is&#x27; 提示从表格中抽取最终答案。表格的行列结构使模型能同时沿行（步骤推进）与列（字段对齐）推理，输出比常规 CoT 更简洁、更易解析。在 6 个算术推理数据集上，zero-shot Tab-CoT 配合 code-davinci-002 在 6 项任务中 5 项超过常规 zero-shot CoT，平均提升 2.2%；few-shot 下平均超过 CoT 1%。消融显示去掉任一列都会掉点（去掉 subquestion 平均降 5.4%），且 code 模型比 text 模型更适合表格推理。对团队而言，这是一种零训练成本、可直接复用的提示模式，适合需要结构化、可解析中间推理的自动化流水线。</p>
+<h2>问题</h2><p>zero-shot 提示难以向 CoT 推理过程注入结构；已有的结构化推理提示方法（如 Least-to-Most、PAL）需要针对不同领域做专门的提示工程或定义多个变量，难以维护和追踪。论文希望找到一种任务无关、zero-shot 可用、能让推理过程显式高度结构化的提示机制。</p>
+<h2>方法</h2><p>Tab-CoT 采用两段式提示：(1) table generation——在问题后附加表格表头（如 &#x27;|step|subquestion|process|result|&#x27;），利用 &#x27;|&#x27; 作为 OpenAI 模型可识别的表格分隔符，迫使 LLM 逐行填表完成 step-by-step 推理；(2) answer extraction——在生成的表格后附加 &#x27;the answer is&#x27; 提示抽取最终答案。提出 structure-promoting scheme：step 列组织行序、subquestion 列纵向形成逐步指令、process 列承载推理过程、result 列强制每步给出（中间）答案。表格的二维结构支持横向（行内）与纵向（跨行）同时推理；还可选取 3 个不同表格 scheme 做 3 路多数投票（self-consistency）提升鲁棒性。</p>
+<h2>关键结果</h2><p> zero-shot 下，Tab-CoT（code-davinci-002）在 6 个算术推理数据集中的 5 个超过最佳常规 zero-shot CoT，平均提升 2.2%，且在所有任务上显著优于 standard prompting</p><p> Tab-CoT 下 code 模型比 text 模型高 4.0%；而常规 CoT 下 text 比 code 高 10.9%（standard prompting 下差距为 15.7%），说明表格提示更能释放 code 模型的推理能力</p><p> 消融实验：从 &#x27;|step|subquestion|process|result|&#x27; 中去掉任一列都会导致性能下降；去掉 subquestion 平均降 5.4%，去掉 step 列降幅最大</p><p> few-shot 下 Tab-CoT 平均超过 few-shot CoT 1%，其中 SVAMP 上差距达 6.5%</p><p> 示例中 zero-shot CoT 生成 140 词，Tab-CoT 仅生成 28 词，输出更简洁</p><p> 用 3 个不同表格 scheme 做 3 路多数投票（self-consistency）可进一步提升整体性能与鲁棒性</p><p> 在 GPT-3.5-turbo-0301 上 Tab-CoT 仍优于常规 zero-shot CoT；13B 的 code-cushman-001 不具备表格 CoT 能力（除 AQUA 外准确率不到 10%）</p><p> Coin Flip 上更 task-specific 的 scheme &#x27;|step|initial coin state|flip or not|next coin state|&#x27; 仅达 68.0% 准确率，因其禁用了纵向推理</p>
+<h2>创新点</h2><p>与 Least-to-Most、PAL 等需要任务特定提示工程、few-shot 样本或外部工具的结构化方法不同，Tab-CoT 仅用一个表头即可在 zero-shot 下注入强结构，且表格 scheme 无需关心语法、易于编写。以往工作多从已有表格数据中抽取信息，而该方法在推理过程中同时生成表格并从表格中抽取答案；论文还通过实验系统揭示了 LLM 在表格上的横向+纵向二维推理现象，以及 code 模型与表格格式的适配性。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程</p><p><b>理由：</b>论文是纯粹的提示技术研究，直接命中 3.2 提示工程域的&#x27;提示技术与模式、思维链/推理提示&#x27;。对以&#x27;把模型用好&#x27;为核心、不做模型训练的团队而言，Tab-CoT 提供了一个零训练成本、可立即试验的提示模式：用表头约束输出结构，使中间推理可解析、可校验，这对代码生成/审查、测试辅助、知识库问答等自动化流水线的下游程序处理与质量保障直接有用；表格 scheme 即模板的特性便于沉淀为可复用的提示词资产；code 模型更适合表格推理的发现对模型选型也有参考价值。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

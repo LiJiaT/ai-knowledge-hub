@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>用步骤感知验证器（Step-Aware Verifier）让大语言模型成为更好的推理器</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Making Large Language Models Better Reasoners with Step-Aware Verifier</h1>
+<p class="lead">用步骤感知验证器（Step-Aware Verifier）让大语言模型成为更好的推理器</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">思维链与推理</span><span class="chip">评测基准</span><span class="chip">可靠性与安全</span><span class="chip">成本与效率</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a497.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文解决 LLM 在 GSM8K 等推理任务上即使使用 chain-of-thought 提示仍频繁出错的问题：已有 self-consistency 依赖固定 prompt 采样加多数投票，路径多样性受限且多数路径被误导时会失效。方法 DIVERSE 包含三个组件：为同一题随机构造 5 组不同 exemplar 的 prompt、各采样 20 条推理路径以扩大多样性；微调 deberta-v3-large 作为 verifier，与投票结合做加权筛选；再通过比较正/负路径中间结果的语义等价性自动生成步骤级标签，训练 step-aware verifier 对每步单独打分。在 code-davinci-002 上于 8 个基准中的 6 个刷新 SOTA（GSM8K 74.4%→83.2%，CLUTRR 67.0%→95.9%），且步骤级分数能指示推理从哪一步开始出错，带来可解释性。对团队而言，&#x27;多样采样+验证器加权投票&#x27;与&#x27;步骤级失败定位&#x27;是提升 LLM 应用输出可靠性的通用模式。</p>
+<h2>问题</h2><p>LLM 在 GSM8K 等算术/常识/归纳推理任务上即使配合 chain-of-thought 提示仍会生成错误推理路径；已有 self-consistency 方法使用固定 exemplar 的 prompt 采样多条路径后做多数投票，存在三方面不足：prompt 固定导致路径多样性受限、多数路径被误导时投票失效、以及无法定位推理链中具体哪一步出错。</p>
+<h2>方法</h2><p>DIVERSE 三组件：(1) Diverse Prompts：每题随机选取 M1=5 组不同 exemplar 组成的 prompt，各自采样解码 M2=20 条推理路径，共 100 条候选；(2) Voting Verifier：用 1000 条 ⟨question, answer⟩ 训练对微调 deberta-v3-large 作为 verifier 输出每条路径的正确概率，将 verifier 概率与投票指示函数结合做加权聚合，避免纯多数投票被误导；(3) Step-aware Voting Verifier：设计算法比较负路径与正路径的中间结果（用 roberta-large-mnli 判断语义等价），自动提取步骤级正/负标签，在损失函数中加入步骤级辅助损失（超参 α 平衡），对每个推理步骤单独验证。exemplar 不足时用 self-teaching 自举伪 exemplar。</p>
+<h2>关键结果</h2><p> 在 code-davinci-002 上于 8 个推理基准中的 6 个取得新 SOTA：GSM8K 74.4%→83.2%、AsDiv 81.9%→88.7%、MultiArith 99.3%→99.8%、SVAMP 86.6%→87.0%、SingleEq 79.5%→94.9%、CLUTRR 67.0%→95.9%</p><p> GSM8K 上相比 Greedy Decode/Self-Consistency 的提升：davinci 22.2%/12.0%，text-davinci-002 33.1%/12.0%，code-davinci-002 27.0%/5.6%；相比 Self-Consistency 在三类推理技能上平均提升 5.6%/5.1%/54.3%</p><p> verifier 训练数据从 1000 条削减 75% 到 250 条，性能仅下降约 2%；每题使用推理路径数 M≥50 后准确率提升趋于边际</p><p> 每个 prompt 使用 8 个 exemplar 可将 GSM8K 准确率进一步提升到 83.2%</p><p> 错误推理步骤中 95% 由错误公式（用错中间结果或算子）导致；随机路径 40% 含冗余步骤，verifier 降至 31%，step-aware verifier 进一步降至 20%；对 33% 的失败用例 step-aware verifier 产生更多正确步骤</p><p> 常识推理任务上比 PaLM-based self-consistency 低 1.9%（StrategyQA 低 3.0%，归因于伪 exemplar 噪声）</p>
+<h2>创新点</h2><p>相对 self-consistency（固定 prompt 采样+多数投票），DIVERSE 的区别在于：通过变换 prompt 本身（而非仅靠采样解码）增加推理路径多样性；用可训练的 verifier 与投票结合替代纯多数投票，避免多数被误导时失效；首次把验证粒度从整条推理链细化到单个推理步骤，并自动构造步骤级标签，同时带来性能提升与&#x27;哪一步开始出错&#x27;的可解释性。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程 | 3.5 评测与可靠使用</p><p><b>理由：</b>直接命中 3.2 提示工程（CoT 推理提示、exemplar 选择与多样 prompt 构造、in-context learning）与 3.5 评测与可靠使用（用 verifier 过滤错误输出提升可靠性、步骤级打分提供失败诊断、人工评测推理步骤质量与错误类型分布分析）。&#x27;多样采样+加权投票&#x27;与&#x27;步骤级正确性定位&#x27;是可迁移到团队代码生成/审查、测试辅助等场景的输出筛选与失败定位通用模式；但 verifier 需微调小模型并依赖标注数据，且实验基于 2022 年的 code-davinci-002，具体数字与模型结论的时效性需注意。</p><p><b>建议动作：</b>作为方法参考存档</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

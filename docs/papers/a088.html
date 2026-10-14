@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>从 Self-Training 视角重新审视 Chain-of-Thought（CoT）推理</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Rethinking Chain-of-Thought from the Perspective of Self-Training</h1>
+<p class="lead">从 Self-Training 视角重新审视 Chain-of-Thought（CoT）推理</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">自动提示优化</span><span class="chip">思维链与推理</span><span class="chip">可靠性与安全</span><span class="chip">成本与效率</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a088.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文观察到 CoT 推理与半监督学习中的 self-training 共享同一核心目标：迭代利用模型自生成的信息（伪标签或推理过程）逐步降低预测不确定性。作者先以高斯混合模型对 self-training 的信息熵变化做理论分析，再类比到 CoT 的 semantic entropy 变化，据此提出包含两个模块的 CoT 框架：task-specific prompt（TSP）模块自动生成候选任务提示并选取 semantic entropy 最低者为最优初始提示；adaptive reasoning iteration（ARI）模块以 semantic entropy 阈值决定何时停止迭代以避免 over-reasoning，并在迭代间引入反思式新提示与 Jaccard 相似度约束保证推理多样性。在 GPT-3.5-turbo 上的 10 个推理数据集实验显示，zero-shot 平均准确率从 SC 基线的 79.5% 提升至 83.7%，且比固定轮数迭代更快更稳。对团队而言，这是一篇把&#x27;自动提示优化&#x27;与&#x27;不确定性驱动的迭代控制&#x27;结合起来的提示工程方法论文，可直接借鉴到提示设计与 LLM 应用可靠性控制中。</p>
+<h2>问题</h2><p>现有 CoT 方法多依赖通用提示（如 &#x27;Let&#x27;s think step by step&#x27;），难以贴合特定领域或细粒度任务的特性，导致初始推理质量不足；同时迭代式 CoT 存在两个关键问题：一是 over-reasoning——早期迭代中已正确的预测在后续多轮迭代中可能被引入的噪声信息改错；二是相邻迭代的推理过程高度相似，无法进一步降低不确定性。论文从 self-training &#x27;迭代利用模型自生成信息以降低预测不确定性&#x27;的视角重新理解并改进 CoT 推理。</p>
+<h2>方法</h2><p>理论层面：用高斯混合模型分析 self-training 中信息熵随迭代的变化规律（初始分类器向 Bayes 最优分类器旋转），并类比到 CoT 的 semantic entropy 变化，得出五条结论（总体熵下降但非逐样本成立、熵下降驱动由错变正的转换、熵上升可致预测反转、迭代同质化导致熵不再变化等）。方法层面提出 ST-COT 框架：(1) task-specific prompt 模块——用构造的指令让 LLM 生成 m 个候选任务提示，在独立采样的问题集上计算各提示的平均 semantic entropy，选最低者为最优提示 p̂ 用于初始推理；(2) adaptive reasoning iteration 模块——每轮对 N 个采样预测计算 semantic entropy，低于阈值 δ 即接受为最终输出；高于阈值则换用鼓励多视角反思的新提示 p*，并用 Jaccard 指数约束新旧推理的差异性（不满足则重采样），迭代至多 T 轮；T 轮后熵仍高于 δ 时对所有轮次预测做 majority voting 兜底。</p>
+<h2>关键结果</h2><p> Zero-shot 任务：10 个数据集平均准确率从 Zero-Shot-CoT+SC 基线的 79.5% 提升至 83.7%（+4.2%）；算术类 6 个数据集从 81.7% 提升至 86.7%</p><p> Few-shot 任务（MultiArith 与 GSM8K）：SC 基线 85.4%，加入 ARI 模块后提升至 87.4%；TSP 相对仅 ARI 平均再贡献 0.4%</p><p> AQuA 上自适应迭代 vs 固定迭代：自适应法第 2 轮达 70.8%、第 5 轮 71.3% 并保持稳定；固定迭代峰值仅 67.3%，第 5 轮降至 62.6%</p><p> 时间成本：自适应法从第 1 轮的 1 小时 5 分增至第 5 轮的 4 小时 18 分，固定迭代法增至 6 小时 29 分</p><p> 超参敏感性：N=3 时 T 从 1 到 4 准确率从 60.2% 升至 71.7% 后趋平；T=3 时 N 从 1 到 2 准确率从 55.5% 升至 70.9%，但 N 增大导致计算时间陡增</p>
+<h2>创新点</h2><p>首次将 CoT 推理与半监督 self-training 在&#x27;迭代利用模型自生成信息以最小化预测不确定性&#x27;层面建立形式化类比，并用 semantic entropy 动态刻画 CoT 迭代过程中的不确定性变化；区别于以往固定轮数、固定提示的 CoT 方法，提出以 semantic entropy 阈值驱动的自适应停止机制（解决 over-reasoning）和以 Jaccard 相似度约束的推理多样性机制（解决迭代同质化），并将任务提示选择形式化为最小化 semantic entropy 的自动搜索问题。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程 | 3.5 评测与可靠使用</p><p><b>理由：</b>直接命中 3.2 提示工程的两项核心技术：自动提示优化（TSP 模块以 semantic entropy 为目标函数自动搜索任务最优提示，替代手工调优的通用提示）与思维链/推理提示（迭代式 CoT、self-consistency、反思式新提示 p* 的设计）。同时命中 3.5 评测与可靠使用：semantic entropy 作为不确定性量化手段用于判断迭代停止时机，直接服务于 LLM 应用的可靠性控制；自适应迭代在准确率与时间成本之间取得平衡，属于成本与效率优化的实证研究。这些正是团队&#x27;如何把模型用好而非训练模型&#x27;关注点的直接对应物。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TableRAG：使用语言模型实现百万 token 级表格理解</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>TableRAG: Million-Token Table Understanding with Language Models</h1>
+<p class="lead">TableRAG：使用语言模型实现百万 token 级表格理解</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">上下文窗口</span><span class="chip">RAG与检索</span><span class="chip">提示技术</span><span class="chip">Agent框架</span><span class="chip">工具调用</span><span class="chip">代码生成Agent</span><span class="chip">评测基准</span><span class="chip">成本与效率</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a152.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>LM 表格理解通常要把整张表放进提示，面对大表会遇到上下文长度限制、Lost-in-the-Middle 位置偏置以及随规模增长的成本与延迟。论文提出 TableRAG，一个专为表格设计的 RAG 框架：先用 LM 做表格化查询扩展，分别生成面向 schema 与单元格值的查询，再通过 schema 检索（列名+类型+示例值）与 cell 检索（对去重列-值对独立编码，并用频率感知的编码预算 B 截断），只把关键信息交给 ReAct 式 program-aided solver 生成程序作答，使输入 token 复杂度与表大小无关。作者还基于 Arcade 与 BIRD-SQL 构建了两个百万 token 级基准（ArcadeQA、BirdQA）。实验显示 TableRAG 在多个 LM 上准确率与检索质量均为最优，schema/cell 检索分别最高带来 9.4%/11.5% 提升，并在 WikiTableQA 上超过已有 SOTA。其查询扩展、预算化检索与成本分析对团队的知识库问答与长上下文管理有直接借鉴价值。</p>
+<h2>问题</h2><p>LM 表格理解方法通常需要把整张表放入提示，导致上下文长度超限（如 100 列×200 行即超 40,000 token）、Lost-in-the-Middle 位置偏置以及随表规模增长的计算成本与延迟；已有的行-列检索方法（如 ITR、TAP4LM）仍需编码整行整列，对百万单元格级别的表不可行，且把长行/列压缩成固定大小向量会掩盖语义（尤其当内容是数值等语义稀疏内容时）。</p>
+<h2>方法</h2><p>TableRAG 是面向表格理解的 RAG 框架，包含四个核心组件：(1) 表格化查询扩展——用 LM 针对问题分别生成面向 schema 与单元格值的多条查询；(2) schema 检索——仅编码列名，检索结果附带数据类型与示例值（数值/日期列给 min/max，类别列给最高频 3 个值）；(3) cell 检索——对去重后的列-值对独立编码建库，并引入频率感知的编码预算 B（论文取 10,000），只编码最高频的 B 个值；(4) program-aided solver——基于 ReAct 的 Agent 通过 python_repl_ast 执行 Python 程序作答。整体 token 复杂度为编码 O(min(D,B))、推理 O(K)，均与表大小无关。</p>
+<h2>关键结果</h2><p> 构建两个百万 token 级新基准：ArcadeQA（平均 79,000 行、最多 700 万单元格）与 BirdQA（平均 62,000 行、峰值 1,000 万单元格），并将 TabFact 合成扩展至 1000×1000（百万单元格）</p><p> 在 GPT-3.5-turbo、Gemini-1.0-Pro、Mistral-Nemo-Instruct-2407 三个 LM 上，TableRAG 在 ArcadeQA 与 BirdQA 上均取得最高准确率，优于 ReadTable、ReadSchema、RandRowSampling、RowColRetrieval</p><p> 检索质量评估中，TableRAG 在列检索与单元格检索的 recall/precision 上均为最优</p><p> 合成 TabFact 规模实验中，TableRAG 随表扩大从 83.1 温和降至 68.4（1000×1000），而 ReadTable 在 100×100 及以上因上下文长度限制直接失败</p><p> 消融实验：schema 检索最高带来 9.4% 准确率提升，cell 检索最高带来 11.5% 提升；查询扩展在所有数据集与 LM 上一致提升性能</p><p> 在 WikiTableQA 小规模基准上超过 TaBERT、Text-to-SQL、Binder、Dater 等已有方法</p><p> token 复杂度分析：编码 O(min(D,B))、推理 O(K)，与表大小无关；从 10^6 个元素计算去重值在个人笔记本上仅需 60 ms</p>
+<h2>创新点</h2><p>区别于整表入提示（ReadTable）、只读 schema（ReadSchema/Text2SQL 类）与行-列整体编码检索（ITR、TAP4LM），TableRAG 首次将 schema 检索与选择性单元格值检索、频率感知截断相结合，使 LM 输入长度与表规模解耦；单元格级独立编码避免了长行/列压缩成固定向量的语义损失；同时首次构建了百万 token 级的表格理解评测基准填补评测空白。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.5 评测与可靠使用</p><p><b>理由：</b>论文核心正是 3.1 域的&#x27;RAG/检索增强、上下文窗口管理与压缩、长上下文策略、结构化上下文组织&#x27;：面对放不进上下文的大表，用查询扩展 + schema/cell 双路检索 + 频率感知截断把上下文压缩到与表规模无关，是结构化上下文管理的代表性工程方案。同时其百万 token 级新基准、token 复杂度分析与成本效率论证命中 3.5 域的&#x27;评测基准&#x27;与&#x27;成本与效率优化&#x27;。团队构建知识库问答与数据分析类 Agent 时会直接遇到&#x27;大表/大文档如何进上下文&#x27;的问题，该方法的查询扩展模式与预算化检索可迁移性强。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

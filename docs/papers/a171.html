@@ -1,0 +1,231 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>面向领域专用与高效 RAG 的多任务检索器微调</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Multi-task retriever fine-tuning for domain-specific and efficient RAG</h1>
+<p class="lead">面向领域专用与高效 RAG 的多任务检索器微调</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">RAG与检索</span><span class="chip">成本与效率</span><span class="chip">评测基准</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a171.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>企业在生产系统中部署多个依赖 RAG 的 GenAI 应用时，现成 embedding 模型难以适配来自数据库的结构化领域数据，且为每个任务单独部署 retriever 无法扩展。论文提出对 305M 参数的 mGTE-base 做多任务 instruction fine-tuning：从内部数据库与 Flow Generation 训练集自动抽取 text-step/table/field 等配对数据，用 15 个指令模板与正负样本挖掘构建训练集，并对高频组件做指数降采样，让一个模型服务 Flow Generation、Playbook Generation、Code Generation 等多个应用。在 HR、财务等域外数据上，微调模型达到 Step@15 0.90、Table@5 0.90、Field@5 0.60，显著超过 BM25 与 mE5、GTE-Qwen2 等开源 embedding 模型；值得注意的是 BM25 反而稳定优于这些开源模型。模型还保留多语言能力并泛化到相似的 workflow 检索任务，但非英语场景性能明显下降。</p>
+<h2>问题</h2><p>真实生产系统中的 RAG 应用面临两个实际问题：一是检索内容高度领域化，现成 embedding 服务在开源基准上表现好但难以泛化到来自数据库的结构化真实数据；二是随着应用增多，无法为每个任务单独部署一个 retriever。核心问题是：如何把检索步骤适配到特定领域并同时适配多种检索任务，且保持低成本、可扩展与低延迟。</p>
+<h2>方法</h2><p>从内部数据库与 Flow Generation 训练集自动抽取 text-对象配对（step、table、table field、catalog item 等）构建多任务检索数据集，全程不做人工标注；用 15 个 instruction 模板把需求、scope、workflow 上下文等信息编入检索指令；按句子嵌入训练惯例构造正负样本对（负样本用两种采样策略挖掘）；对高频组件按频率指数降采样以缓解数据不均衡；最终以对比损失对 mGTE-base（305M 参数、8,192 tokens 上下文、多语言）做 instruction fine-tuning，部署单一 retriever 服务整个 GenAI 应用生态。</p>
+<h2>关键结果</h2><p> 对高频 step 做指数降采样后，微调 mGTE-base 的 step 检索提升 8%，field 检索仅有小幅损失</p><p> 在所有 OOD split 的加权平均上，多任务微调 mGTE-base 达到 Step@15 0.90、Table@5 0.90、Field@5 0.60，全面超过 BM25 与 mE5（small/base/large）、GTE-Qwen-2、E5-mistral、GritLM</p><p> BM25 稳定优于所有被评测的开源 embedding 模型（与规模无关）；mE5 从 small 扩到 large 无提升甚至更低</p><p> 多语言评测（DE/ES/FR/JA/HE，经 Google Translate 翻译）：微调模型整体优于 base mGTE（仅希伯来语 step 检索例外），但显著低于英语结果：step 0.90→0.64、table 0.90→0.66、field 0.60→0.48</p><p> workflow 检索泛化任务（recall@5，303 例）：微调模型优于 BM25 与 base 模型，但 base 模型平均已达 0.87，作者认为该任务可能偏容易</p>
+<h2>创新点</h2><p>与联合训练 retriever 与 generator、引入知识图谱、或通过 Retrieval-Augmented Fine Tuning 修改 LLM 训练数据的领域 RAG 工作不同，本方法只训练一个更好的 retriever，可与任意 LLM 搭配、降低耦合；并将 instruction-following embedding 的多任务训练思路应用到从数据库抽取的结构化数据检索上，用一个 305M 小模型服务整个企业 GenAI 应用生态。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.5 评测与可靠使用</p><p><b>理由：</b>论文核心是 RAG 检索步骤的领域适配与多任务复用，直接命中 3.1 的&#x27;RAG/检索增强、上下文在生产系统中的管理&#x27;：检索质量决定进入 LLM 上下文的数据质量，这是团队知识库问答、代码生成辅助等场景的共性基础。同时论文以单一小模型服务多应用、最小化硬件成本与延迟，并给出 OOD/多语言/任务泛化的系统性检索评测方法，与 3.5 的&#x27;成本与效率优化、评测方法、AI 辅助工程实证&#x27;相关。虽然涉及微调，但对象是小型 retriever 而非 LLM，属于&#x27;把模型用好&#x27;的工程范畴，与团队定位一致。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2501.04652v2  [cs.CL]  16 Jul 2025</p>
+<h2>Multi-task retriever fine-tuning for domain-specific and efficient RAG</h2>
+<p>Patrice Bechard ServiceNow 加拿大蒙特利尔</p>
+<p>patrice.bechard@servicenow.com 不同规模的现成检索器可供 AI 从业者使用。诸如 Voyage 1 之类的嵌入服务在开源基准测试上表现良好，但它们不一定能泛化到现实场景中出现的那类数据，尤其是当这些数据是结构化的且来自现有数据库时。</p>
+<figure><img src="assets/a171/figures/fig_1.png" alt="Figure 1: 给定一个由 RAG 应用组成的生态系统，我们如何构建一个能够适应特定领域以及多种检索任务的检索器？" loading="lazy"></figure>
+<figcaption>Figure 1: 给定一个由 RAG 应用组成的生态系统，我们如何构建一个能够适应特定领域以及多种检索任务的检索器？</figcaption>
+<p>另一个实际挑战是在依赖于检索的不同生成式人工智能（GenAI）用例之间实现可扩展性与泛化。与传统机器学习模型相比，大语言模型（LLM）的一个关键优势在于，得益于海量的预训练数据和指令微调 [20, 31, 34]，它们能够泛化到各种各样的任务。但如果检索器无法在众多检索任务上实现良好而快速的表现，下游生成将受到负面影响。</p>
+<p>那么，我们试图解决的问题是：如何将检索步骤适配到特定领域以及多种检索任务？在这项工作中，我们并不关注 LLM 的选择，</p>
+<p>1 https://docs.voyageai.com/docs/embeddings</p>
+<h2>Abstract</h2>
+<p>检索增强生成（Retrieval-Augmented Generation, RAG）在部署大语言模型（Large Language Model, LLM）时已变得无处不在，因为它能够应对生成幻觉信息或过时信息等典型局限。然而，在构建真实世界的 RAG 应用时，会出现一些实际问题。首先，检索到的信息通常是特定领域的。由于微调 LLM 的计算开销很大，因此更可行的做法是微调检索器模型，以提升 LLM 输入中所含数据的质量。其次，随着越来越多的应用部署到同一个真实世界系统中，为不同任务分别部署检索器是难以承受的。此外，这些 RAG 应用通常需要检索不同类型的数据。我们的解决方案是在多种特定领域任务上对一个小型检索器模型进行指令微调，从而只需部署一个模型即可服务于众多用例，进而实现低成本、可扩展性与高速度。我们展示了该模型如何在真实世界的企业用例中泛化到域外设置，以及泛化到一个未见过的检索任务。</p>
+<h2>CCS Concepts</h2>
+<p>· 计算方法学 → 信息抽取；多任务学习；学习排序；· 信息系统 → 检索模型与排序。</p>
+<h2>Keywords</h2>
+<p>检索增强生成（Retrieval-Augmented Generation, RAG）、工作流、微调、多任务、检索器</p>
+<h2>1 Introduction</h2>
+<p>随着越来越多的生成式人工智能（Generative AI, GenAI）应用被集成到真实的生产系统中，检索增强生成（Retrieval-Augmented Generation, RAG）已被业界采用为一种提升大语言模型（Large Language Model, LLM）输出质量的常用技术。RAG 缓解了 LLM 固有的一些缺陷，例如容易产生幻觉的倾向、生成过时的知识以及缺乏对数据源的可追溯性 [6, 9]。</p>
+<p>然而，在生成过程中引入检索步骤也带来了若干实际挑战。虽然像 GPT-4 [19] 这样拥有大量参数的 LLM 可以通过提示来处理任意类型的输入并生成任意类型的文本输出，但检索器必须小巧、快速，并且能够在往往具有领域特性的数据源上表现良好。</p>
+<p>KDD Workshop &#x27;25，加拿大多伦多，2025 年。</p>
+<p>并假设检索结果的改进能够转化为下游生成任务的改进。</p>
+<p>本文的应用场景是一家企业，该企业部署了多个目前依赖或将要依赖 RAG 的 GenAI 应用：Flow Generation [3]、Playbook Generation 2 以及 Code Generation。工作流（workflow）是自动化实现一个或多个目标的分步流程，而 playbook 则包含工作流以及其他诸如表单之类的 UI 组件。这些应用的目标是从文本输入生成领域特定的工作流、playbook 和代码。</p>
+<p>我们的解决方案是在多种任务上对一个小型检索器进行指令微调（instruction fine-tuning）。该检索器被部署在 GenAI 应用生态系统中，各应用通过提示让它从数据库中检索所需的结构化数据。随后，工作流步骤名称、表名、字段名等信息会被传递给 LLM，用于生成工作流或 playbook，从而带来更高的输出质量。</p>
+<p>为了构建多任务检索器数据集，我们从内部数据库中提取数据，并复用了 Flow Generation 训练集。在我们的解决方案中，我们选择对 mGTE [36] 进行微调，原因在于其上下文长度较大（8,192 个 token），使其能够接收较长的指令，并且它还具备多语言能力。我们将其与 BM25（一种简单而强大的词频方法 [23]）以及近期的开源多语言嵌入模型 mE5 [30] 和 mGTE 进行比较。我们还纳入了对基于 LLM 的更大规模指令微调模型的评估，即 GTE-Qwen-2 [32]、E5-mistral [29] 和 GritLM [17]。</p>
+<p>我们进行了多项评估。首先，我们在检索器（retriever）所训练的任务上进行评估，但采用域外（out-of-domain, OOD）设置。内部训练数据集来自 IT 领域，而 OOD 划分则来自人力资源（HR）和财务等多样化领域。随后，我们在一个相关但不同的检索任务上进行评估，以测试模型的泛化能力。例如，虽然模型被训练用于基于文本检索步骤名称，我们还希望基于文本检索相关的工作流结构。这是一个相关任务，因为工作流由步骤组成。最后，为了考察模型的多语言能力在经过我们的多任务微调后是否得以保留，我们使用不同语言的输入进行评估，尽管我们的检索训练数据集仅有英文版本。</p>
+<p>我们的贡献如下：</p>
+<h2>2 Related Work</h2>
+<p>已有多项研究致力于实现面向特定领域的检索增强生成（RAG）。尽管更为复杂，但联合训练检索器与生成器已被证明在问答任务中效果良好 [25]。另一些工作则在向量数据库之外，还将领域特定信息编码到知识图谱中 [2]。检索增强微调（Retrieval-Augmented Fine Tuning）[35] 通过修改检索到的信息在大语言模型（LLM）训练数据集中的呈现方式，帮助 LLM 适应特定领域。相比之下，我们的方法仅依赖于训练一个更好的检索器，该检索器可与任何 LLM 配合使用，从而降低了耦合度。</p>
+<p>experiences/page/administer/now-assist-platform/concept/now-assist-playbook-</p>
+<p>2 www.servicenow.com/docs/bundle/xanadu-intelligentgeneration-skill.html</p>
+<p>多任务检索器模型 [15, 28] 通过同时在多个任务上进行训练，或利用涵盖多样主题的大型数据集，来增强嵌入的通用性。在这一概念的基础上，指令遵循嵌入模型 [1, 4, 26] 将显式指令融入嵌入过程，从而能够生成更加细致且更具任务针对性的嵌入。我们利用这种指令微调方法，在多个包含从数据库中提取的结构化数据的数据集上训练检索器。</p>
+<p>最后，生成工作流是一项结构化输出任务，与代码生成类似，需要专门的嵌入。代码嵌入模型 [7, 10, 13, 18, 33] 将常见的训练技术适配到代码表示学习与检索这一领域。另一条并行的研究路线则聚焦于结构化数据嵌入模型，其中包括 Synchromesh [21]，它对模型进行微调，利用一种由树编辑距离导出的相似度度量来检索相关样本以用于少样本提示；以及 SANTA [14]，它实现了一种经过修改的预训练目标，以生成具备结构感知能力的表示。先前工作已经将 RAG 用于一个类似但更为受限的结构化输出任务 [3]。本文是对这一方向的自然扩展，旨在提高检索器在不断扩大的生成式 AI（GenAI）应用生态系统中的可复用性。</p>
+<h2>3 Methodology</h2>
+<p>为了构建多任务检索器，我们首先需要定义任务，然后构建相应的数据集，同时要牢记我们无法为这些任务进行任何人工标注。出发点是定义现有 RAG 应用所需要的数据。</p>
+<p>当前部署在我们系统中的 GenAI 应用需要多种类型的检索数据，才能生成用户可接受的输出。随着这些应用变得更加复杂，所检索数据的范围和类型只会不断增加。但目前我们主要关注两类对象：一是步骤（steps），它们被工作流（workflows）和剧本（playbooks）所使用；二是表（tables），它们被工作流和剧本所使用，并且可用于代码生成。步骤是流程的构建模块；它们可以是动作（actions）、子流程（subflows）或活动（activities）。对于表而言，关键信息是表名和表字段名。例如，用户可能想要生成执行数据库调用的代码，但若不基于实际的表信息对 LLM 进行接地（grounding），LLM 可能会引用一个不存在的表名。</p>
+<p>我们从两个来源提取数据，以构建多任务检索数据集。复杂且语义多样的样本由 Flow Generation 训练集创建而来。图 2 展示了该集合中一个以 YAML 格式表示的示例，其中包含步骤名（definition）、表名以及表字段名（conditions 和 values 的一部分）。另一个来源是数据库表，这些数据库表包含除步骤和表之外、我们所感兴趣的其他元素，且这些元素含有诸如 description 之类的文本字段。</p>
+<h2>3.1 Tasks</h2>
+<p>我们从 Flow Generation 训练集中构建了三类任务，约占全部检索示例的一半：</p>
+<p>requirement: Every day, look up incident tasks that do not have assignees and close them. trigger: annotation: every day type: daily inputs: - name: time value: &#x27;1970-01-02 00:00:00&#x27; steps: - annotation: look up incident tasks that do not have assignees definition: look_up_records order: 1 inputs: - name: table value: incident_task - name: conditions value: assigned_toISEMPTY - annotation: for each record definition: FOREACH order: 2 inputs: - name: items value: &#x27;{{1.Records}}&#x27; - annotation: close them definition: update_record order: 3 block: 2 inputs: - name: record value: &#x27;{{2.item}}&#x27; - name: table_name value: incident_task - name: values value: state=3</p>
+<p>为了增加每类任务的多样性，我们纳入了输入的若干种排列变体，例如：</p>
+<p>其余一半的检索示例来自数据库表，例如 catalog items 表。该表表示系统中可申请的物品，例如笔记本电脑。目录项名称旁还有一个 description 字段，由此形成一项根据描述检索物品名称的任务。</p>
+<h2>3.2 Dataset Generation</h2>
+<p>在定义了用于训练检索器的任务之后，我们着手创建一组由文本和对象组成的配对，其中对象可以是步骤、表、表字段名、目录项等。配对中的文本部分是一条描述需要检索内容的指令。下面我们指示检索器仅根据一条需求来查找步骤。</p>
+<p>Represent this requirement for searching relevant steps: requirement: Every day, look up incident tasks that do not have assignees and close them.</p>
+<p>鉴于可能有更多元数据可用于查找步骤，我们可以在指令中添加额外信息。下面我们告诉检索器，该流程属于 teams 范围的一部分。</p>
+<p>Represent this flow for searching relevant steps: type: flow scope: sn_ms_teams_ah requirement: Every day at 9am, notify me of pending tasks in a teams msg.</p>
+<p>由于我们对检索器进行了指令微调（instruction fine-tuning），我们甚至可以添加更多细节。例如，指令中可以包含工作流上下文。当我们希望检索器除了最后一条批注之外，还受到工作流中已包含内容的影响时，这一点非常有用。</p>
+<p>Represent this flow for searching relevant steps for the last step: type: flow rcope: sn_ms_teams_ah requirement: Every day, look up incident tasks that do not have assignees and close them. trigger: annotation: every day type: daily inputs: - name: time - value: &#x27;1970-01-02 00:00:00&#x27; steps: - annotation: look up incident tasks that do not have assignees</p>
+<p>我们可以使用类似的指令来检索任何元素。因此，给定已标注的工作流和数据库表的摘录，我们便能为文本/步骤、文本/表、文本/字段、文本/目录项等创建大量样本。我们总共使用 15 个指令模板来增加输入的多样性，并计划添加更多。</p>
+<p>遵循句子嵌入模型训练中已确立的实践 [22]，我们同时创建正样本对和负样本对，使模型能够有效地区分并检索相关元素。</p>
+<p>正样本如上所述从已标注的工作流中提取。为了挖掘负样本，我们采用两种采样策略：</p>
+<h2>4 Experiments</h2>
+<p>我们描述了用于训练和评估的数据集、与之比较的基线（baseline）方法，以及所使用的检索指标。</p>
+<h2>4.1 Datasets</h2>
+<p>在训练中，我们使用从 Flow generation 训练集和数据集表格中能够提取的所有配对，但对于开发集，我们仅在步骤、表名和表字段检索上进行评估，因为这些是最重要的检索任务。开发集样本仅来自 Flow Generation 开发集。表 1 展示了多任务开发集中步骤、表和字段的样本数量。</p>
+<div class="tablewrap"><table><thead><tr><th>Train Pairs</th><th>Dev Steps</th><th>Dev Tables</th><th>Dev Fields</th></tr></thead><tbody>
+<tr><td>172,658</td><td>279</td><td>307</td><td>355</td></tr>
+</tbody></table></div>
+<p>|   Train Pairs |   Dev Steps |   Dev Tables |   Dev Fields |</p>
+<figcaption>Table 1: 训练对的数量以及开发集中的示例数量。</figcaption>
+<p>尽管数据集中有接近 5K 个不同的步骤，但其中约有 20 个被使用得最为频繁。这在步骤检索任务中造成了很大的不平衡。例如，look _up_record 步骤的使用频率远高于 slack scope 中的步骤，因为检索数据库记录是工作流中的常见操作。因此，我们尝试根据组件的出现频率以指数方式对其进行下采样（例如，对数据集中出现 50 次的步骤按 4 倍下采样，对出现 500 次的步骤按 16 倍下采样）。类似的方法也应用于表和字段，尽管它们的不平衡程度没有那么剧烈。</p>
+<p>在评估方面，我们使用来自企业系统部署的 10 个数据划分（split），从而模拟在真实客户环境中的评估。虽然标注数据集来自我们内部的 IT 领域，但这些其他划分来自不同的领域，并包含 IT 领域中不存在的步骤和表。它们的统计信息如表 2 所示。</p>
+<div class="tablewrap"><table><thead><tr><th>Dataset ID</th><th>Flows</th><th>Steps samples</th><th>Tables samples</th><th>Fields samples</th></tr></thead><tbody>
+<tr><td>OOD1</td><td>103</td><td>166</td><td>58</td><td>107</td></tr>
+<tr><td>OOD2</td><td>100</td><td>94</td><td>209</td><td>392</td></tr>
+<tr><td>OOD3</td><td>100</td><td>119</td><td>261</td><td>450</td></tr>
+<tr><td>OOD4</td><td>100</td><td>136</td><td>188</td><td>275</td></tr>
+<tr><td>OOD5</td><td>100</td><td>141</td><td>206</td><td>305</td></tr>
+<tr><td>OOD6</td><td>100</td><td>179</td><td>255</td><td>529</td></tr>
+<tr><td>OOD7</td><td>98</td><td>140</td><td>329</td><td>665</td></tr>
+<tr><td>OOD8</td><td>100</td><td>145</td><td>188</td><td>246</td></tr>
+<tr><td>OOD9</td><td>100</td><td>207</td><td>158</td><td>301</td></tr>
+<tr><td>OOD10</td><td>171</td><td>134</td><td>477</td><td>690</td></tr>
+<tr><td>TOTAL</td><td>1,072</td><td>1,461</td><td>2,329</td><td>3,960</td></tr>
+</tbody></table></div>
+<p>| Dataset ID   |   Flows |   Steps samples |   Tables samples |   Fields samples |</p>
+<figcaption>Table 2: OOD 划分中检索示例的数量。</figcaption>
+<p>为了检验基础模型（mGTE）的多语言能力在经过我们的多任务微调后是否得以保留，我们使用 Google Translate API 对开发数据集进行了翻译。</p>
+<p>最后，我们的目标是泛化到类似的检索任务，使检索器能够用于任何需要类似数据的检索增强生成（RAG）应用。为此，我们创建了一个名为 workflow retrieval 的任务，即从文本中检索工作流（YAML 格式）。这对于 Flow Generation 中的少样本提示（few-shot prompting）可能很有用。对于该任务，我们在来自 OOD1、OOD8 和 OOD9 的 flow 上进行评估，共得到 303 个样本。</p>
+<h2>4.2 Models</h2>
+<p>我们对比的最简单基线是 BM25，它在 RAG 部署方面最为简单。更强的基线是开源多语言模型。我们选取了 mE5 [30] 的 small（118M）、base（278M）和 large（560M）版本，以观察更多的参数是否有助于检索。由于 mE5 的上下文长度为 512，我们还选择了 mGTE-base [36]，其上下文长度为 8,192，参数量为 305M。</p>
+<p>我们的解决方案是使用对比损失目标 [11] 对 mGTE-base 进行微调。我们偏好具有大上下文的检索器，因为一旦部署，我们将无法控制其接收到的指令/上下文的长度。我们还偏好较小的模型，以使 RAG 的检索部分能够扩展到大量的大语言模型（LLM）并发调用。附录 A 提供了我们训练过程的详细信息，包括超参数。</p>
+<h2>4.3 Evaluation Metrics</h2>
+<p>我们在所有任务中均使用 Recall@K [16] 作为评估指标。虽然我们简要探索了更复杂的指标，例如归一化折损累计增益（NDCG）[12] 和平均倒数排名（MRR）[27]，但我们发现，在我们的使用场景中，这些指标与召回率高度相关。</p>
+<p>我们报告最重要检索任务上的结果。在生成包含许多步骤的工作流或操作手册（playbook）时，LLM 需要锚定（grounded）在客户所安装的企业系统上。在这些情况下，由于我们建议向 LLM 展示许多步骤，因此我们采用 Step@15（K=15）进行评估。当 LLM 需要在其生成内容中包含表名或字段名时，我们建议提供更少的选择，因为通常只需要一到两个表；因此，这里我们使用 Table@5 和 Field@5（K=5）。</p>
+<h2>5 Results</h2>
+<p>我们首先展示如何利用开发集得到我们最佳的多任务检索器，并将其与在每个任务上单独微调的模型进行比较。随后我们展示分布外（OOD）、多语言以及工作流检索的结果。</p>
+<h2>5.1 Multi-task Retriever</h2>
+<p>由于相关任务的数据集规模更大，我们预期多任务微调会优于单任务微调。然而，我们并未预料到步骤分布的不均衡会导致如此程度的性能下降。表 3 显示，在经过微调的 mGTE-base 模型上，对数据进行下采样使步骤检索提升了 8%，而字段检索仅有小幅损失。</p>
+<p>这些发现表明，在为 RAG 微调检索器时，需要谨慎对待数据集的构成。在实际场景中，通常存在较大的数据不均衡，需要根据具体领域加以处理。</p>
+<div class="tablewrap"><table><thead><tr><th>Setup</th><th>Step@15</th><th>Table@5</th><th>Field@5</th></tr></thead><tbody>
+<tr><td>Single Task</td><td>0.78</td><td>0.82</td><td>0.71</td></tr>
+<tr><td>Multi-Task</td><td>0.77</td><td>0.86</td><td>0.73</td></tr>
+<tr><td>+ Downsampled data</td><td>0.86</td><td>0.88</td><td>0.71</td></tr>
+</tbody></table></div>
+<p>| Setup              |   Step@15 |   Table@5 |   Field@5 |</p>
+<figcaption>Table 3: 单任务与多任务对比以及均衡数据集的影响。在开发集划分上进行评估。</figcaption>
+<h2>5.2 Comparison to Baselines on OOD Splits</h2>
+<p>表 4 展示了在所有分布外（OOD）划分上按数据集规模加权的平均结果。</p>
+<div class="tablewrap"><table><thead><tr><th>Model</th><th>Step@15</th><th>Table@5</th><th>Field@5</th></tr></thead><tbody>
+<tr><td>BM25</td><td>0.82</td><td>0.79</td><td>0.26</td></tr>
+<tr><td>mE5-Small</td><td>0.72</td><td>0.54</td><td>0.15</td></tr>
+<tr><td>mE5-Base</td><td>0.74</td><td>0.64</td><td>0.15</td></tr>
+<tr><td>mE5-Large</td><td>0.72</td><td>0.59</td><td>0.13</td></tr>
+<tr><td>mE5-Large-Instruct</td><td>0.8</td><td>0.74</td><td>0.14</td></tr>
+<tr><td>mGTE-Base</td><td>0.72</td><td>0.63</td><td>0.08</td></tr>
+<tr><td>GTE-Qwen2-1.5B-Instruct</td><td>0.21</td><td>0.12</td><td>0.01</td></tr>
+<tr><td>GTE-Qwen2-7B-Instruct</td><td>0.18</td><td>0.08</td><td>0.03</td></tr>
+<tr><td>GritLM-7B</td><td>0.75</td><td>0.59</td><td>0.16</td></tr>
+<tr><td>E5-Mistral-7B-Instruct</td><td>0.57</td><td>0.51</td><td>0.16</td></tr>
+<tr><td>Finetuned mGTE-Base (Ours)</td><td>0.9</td><td>0.9</td><td>0.6</td></tr>
+</tbody></table></div>
+<p>| Model                      |   Step@15 |   Table@5 |   Field@5 |</p>
+<figcaption>Table 4: BM25、小型与大型开源模型，以及多任务指令微调的 mGTE-base（我们的方法）的性能。结果为所有 OOD 划分上的加权平均值。</figcaption>
+<p>在我们的领域特定检索基准测试（benchmark）上，我们经过多任务微调的 mGTE-base 模型在所有指标上均取得最高性能，大幅优于 BM25 以及所有被评估的开源嵌入模型。值得注意的是，无论模型规模大小，BM25 始终优于开源嵌入模型，其中包括 mE5-large 和 GTE-Qwen2 等更大的变体。将 mE5 检索器从 small 规模扩展到 large 规模并未带来提升，在某些情况下反而导致更低的分数。只有我们的模型带来了强劲且一致的提升，在 Step@15 和 Table@5 上均达到 0.90，在 Field@5 上达到 0.60。</p>
+<p>我们还观察到，字段检索是最困难的任务，因为与表和步骤相比，字段名称的种类更加繁多。该检索器似乎能够很好地跨领域泛化，因为其召回率数值与开发集上的结果（如表 3 所示）相差不大。</p>
+<h2>5.3 Effect on Multilingual Capabilities</h2>
+<p>我们选择 mGTE 作为基础模型，不仅因为它具有较长的上下文长度，还因为它支持多种语言。许多开源和商业大语言模型（LLM）已经支持多种语言。要让 RAG 正常工作，检索器也需要在非英语语言下表现良好。</p>
+<p>我们使用 Google Translate API 将开发数据集翻译成德语（DE）、西班牙语（ES）、法语（FR）、日语（JA）和希伯来语（HE）。表 5 展示了 mGTE-base 与我们微调版本的对比结果。</p>
+<p>我们在英文数据集上进行的多任务微调使检索器在这些非英语数据集上的表现优于基础模型。</p>
+<div class="tablewrap"><table><thead><tr><th>Model</th><th>DE</th><th>ES</th><th>FR</th><th>JA</th><th>HE</th><th>Avg.</th></tr></thead><tbody>
+<tr><td>Step@15 mGTE-base</td><td>0.53</td><td>0.66</td><td>0.66</td><td>0.6</td><td>0.47</td><td>0.58</td></tr>
+<tr><td>Ours</td><td>0.65</td><td>0.75</td><td>0.76</td><td>0.64</td><td>0.42</td><td>0.64</td></tr>
+<tr><td>Table@5 mGTE-base</td><td>0.34</td><td>0.38</td><td>0.42</td><td>0.36</td><td>0.39</td><td>0.38</td></tr>
+<tr><td>Ours</td><td>0.65</td><td>0.76</td><td>0.71</td><td>0.62</td><td>0.57</td><td>0.66</td></tr>
+<tr><td>Field@5 mGTE-base</td><td>0.15</td><td>0.17</td><td>0.16</td><td>0.15</td><td>0.17</td><td>0.16</td></tr>
+<tr><td>Ours</td><td>0.49</td><td>0.58</td><td>0.57</td><td>0.41</td><td>0.36</td><td>0.48</td></tr>
+</tbody></table></div>
+<p>| Model             |   DE |   ES |   FR |   JA |   HE |   Avg. |</p>
+<figcaption>Table 5: 在多语言开发集上针对步骤、表格和字段检索的结果。</figcaption>
+<p>基础模型表现更好的唯一情形是希伯来语步骤检索。然而，所有三种检索任务的平均结果都显著低于表 4 所示的英文结果：步骤检索从 0.90 降至 0.64，表检索从 0.90 降至 0.66，字段检索从 0.60 降至 0.48。这表明我们可能需要在多任务数据集中加入一些多语言的领域特定数据。</p>
+<h2>5.4 Generalization to Workflow Retrieval</h2>
+<p>一旦我们的检索器部署完成，它就可以被任何其他 RAG 应用所使用。因此，我们在一个类似的任务上对其进行评估，该任务需要根据给定文本检索工作流。我们使用 recall@5 指标，即针对特定文本查找单个工作流。为了缩短评估时间，我们选取了三个分布外（OOD）数据划分。</p>
+<p>表 6 显示，多任务微调后的检索器表现优于 BM25 和基础模型。但这个任务可能过于简单，因为基础模型平均获得了 0.87 的 recall@5。尽管如此，我们的微调仍然提升了性能，这表明多任务数据集能够将知识迁移到类似的检索任务中。</p>
+<div class="tablewrap"><table><thead><tr><th>Model</th><th>OOD1</th><th>OOD8</th><th>OOD9</th><th>Avg.</th></tr></thead><tbody>
+<tr><td>BM25</td><td>0.73</td><td>0.6</td><td>0.66</td><td>0.66</td></tr>
+<tr><td>mGTE-base</td><td>0.94</td><td>0.76</td><td>0.9</td><td>0.87</td></tr>
+<tr><td>Ours</td><td>0.98</td><td>0.93</td><td>0.9</td><td>0.94</td></tr>
+</tbody></table></div>
+<p>| Model     |   OOD1 |   OOD8 |   OOD9 |   Avg. |</p>
+<figcaption>Table 6: 在工作流检索任务上的泛化能力。指标为 recall@5。</figcaption>
+<h2>6 Conclusion</h2>
+<p>我们提出了一种构建面向特定领域检索增强生成（RAG）的小型检索器的方法。通过多任务训练和指令微调，我们可以为多种应用部署仅含 305M 参数的检索器，从而将硬件成本和延迟降至最低。此外，该检索器在特定领域用例的多语言数据集上表现良好，并在泛化至类似检索任务方面展现出令人鼓舞的结果。未来的工作包括扩展检索任务以及提升微调模型的多语言能力。</p>
+<h2>A Training Details</h2>
+<p>我们对 mGTE-base 进行了 5,000 步的微调，相当于在该数据集上训练约 2 个 epoch。训练超参数如下：采用批大小（batch size）为 32 的设置，其中每设备批大小为 2，梯度累积步数为 16。由于我们未使用批内负样本（in-batch negatives），因此无需采用 GradCache [8] 等技术来应对更大的批大小。学习率设置为 5e-5，权重衰减为 0.01。先实施 500 步的预热期，随后采用余弦学习率调度器。为优化内存使用，采用了梯度检查点（gradient checkpointing）技术 [5]。选用 Adafactor 优化器 [24] 以限制内存消耗。</p></div></div></body></html>

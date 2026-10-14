@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>用语言模型对语言模型检测器进行 Red Teaming（红队测试）</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Red Teaming Language Model Detectors with Language Models</h1>
+<p class="lead">用语言模型对语言模型检测器进行 Red Teaming（红队测试）</p>
+<div style="margin-top:10px"><span class="lvl lvl-medium">medium</span><span class="chip">arXiv</span><span class="chip">可靠性与安全</span><span class="chip">自动提示优化</span><span class="chip">提示技术</span><span class="chip">评测基准</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a579.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>该论文系统评估了 LLM 生成文本检测器在对抗攻击下的可靠性，覆盖 classifier-based（OpenAI AI Text Classifier、RoBERTa）、watermarking 和 likelihood-based（DetectGPT）三类检测器。作者提出两种黑盒攻击：一是用另一个同样受检测器保护的辅助 LLM 生成上下文兼容的同义词替换，配合 query-free 随机替换或 query-based 进化搜索改写输出；二是在小规模训练子集上自动搜索一段固定的 instructional prompt，引导 ChatGPT 切换写作风格以绕过检测。与同期工作不同，本文设定攻击者 LLM 自身也被检测器保护，证明即使所有强 LLM 都被保护，现有检测器仍会失效。实验中 DetectGPT 的 AUROC 在 XSum 上从 84.4% 跌至 3.9%，OpenAI AI Text Classifier 的 AUROC 最多下降 55.6 个百分点，而人工评估显示攻击后文本质量仅轻微下降。结论是现有 LLM 文本检测手段尚不够可靠，需要更鲁棒的检测方案。</p>
+<h2>问题</h2><p>现有 LLM 生成文本检测器（classifier-based、watermarking、likelihood-based 三类）在面对对抗性文本操纵时是否可靠；尤其在比以往工作更难的设定下——攻击者可用的辅助 LLM 本身也被检测器保护——检测器是否仍会被绕过。</p>
+<h2>方法</h2><p>两类黑盒攻击（检测器仅可见输出分数）：1) 词替换攻击：用受保护的辅助 LLM G&#x27; 针对上下文生成候选替换词（对 ChatGPT 用指令式提示、对 LLaMA 用补全式提示），再以 query-free 随机替换或 query-based 进化搜索（遗传算法，每例约 70 次检测器查询）选择替换，替换预算为非停用词的 20%；针对 watermarking 另设计两阶段 query-free 攻击，先用语言模型预测熵排序 token、优先替换 greenlist token 以破坏统计特征。2) instructional prompt 攻击：面向能遵循指令的 LLM 与 classifier-based 检测器，在 50 个训练样本上迭代搜索一段固定的附加指令 [X_ins, X_ref]（引导模型模仿参考文风），测试时完全 query-free；搜索中用词重叠匹配分数阻止模型直接抄写参考文本。</p>
+<h2>关键结果</h2><p> DetectGPT：XSum 上 GPT-2-XL 的 AUROC 从 84.4% 降至 25.9%（query-free 替换），query-based 进化搜索后进一步降至 3.9%；ChatGPT 与 LLaMA-65B 分别从 56.0%/59.3% 降至 25.6%/25.5%，query-based 后降至 4.5%/9.9%</p><p> OpenAI AI Text Classifier：query-free 攻击使 AUROC 在 XSum/ELI5 上分别下降 18.9/28.1 个百分点，query-based 攻击进一步下降 45.4/55.6 个百分点至低于随机水平</p><p> watermarking 检测器：在 δ=1.0/1.5 两种设置下，query-free 词替换使检测率（阈值设为人类文本 1% 误报率）显著下降，且优于 Dipper paraphrasing 而无需单独的未保护改写模型；具体数值在论文表格中，正文未逐条列出</p><p> 对专门针对 GPT-2 文本训练的 RoBERTa-Large 检测器，paraphrasing 与 query-free 替换的 Attack Success Rate 接近 0，query-based 进化搜索取得明显更高的 ASR</p><p> instructional prompt 攻击（n=50 训练样本、T=5 轮迭代、每轮 K=5 候选）显著降低 AUROC 与检测率，效果优于用 ChatGPT 直接改写，且测试时无需多次查询</p><p> MTurk 人工评估（每数据集 20 例、3 名标注者、1-3 分制）显示攻击后文本的 fluency 与 plausibility 仅轻微下降，质量仍可接受</p>
+<h2>创新点</h2><p>与同期用未受保护的改写模型攻击检测器的研究（如 Dipper paraphrase）不同，本文首次系统考虑辅助攻击 LLM 自身也被检测器保护的设定，证明即使未来所有强 LLM 都被保护，现有检测器仍可被攻破；同时用 LLM（而非同义词表或 BERT 类模型）生成上下文兼容的高质量替换词，并提出测试时 query-free、可跨输入复用的 instructional prompt 自动搜索方法。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>medium</p><p><b>命中能力域：</b>3.5 评测与可靠使用 | 3.2 提示工程</p><p><b>理由：</b>论文核心是对 LLM 文本检测器的对抗鲁棒性评测，直接落在 3.5 的&#x27;可靠性/安全性/滥用防护&#x27;议题内，并提供了一套&#x27;用 LLM 红队测试 LLM 系统&#x27;的评测方法；其 Section 5 的 instructional prompt 自动搜索（小样本+目标函数+迭代搜索+防抄写约束）在方法上属于自动提示优化，可被 3.2 借鉴。但团队不构建检测器、不做对抗研究，论文与团队&#x27;用 LLM/Agent 做工程自动化&#x27;的核心场景（上下文工程、Agent 架构、多智能体协作）无直接交集，与 3.1/3.3/3.4 均无实质关联，因此整体为 medium：价值主要在于风险提示（不要在工程流程中依赖 AI 文本检测）与可迁移的方法模式。</p><p><b>建议动作：</b>作为方法参考存档</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p><h2>证据核查</h2><p class='muted'>1 条证据未在原文中核对到</p></div></div></body></html>

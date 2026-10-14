@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM 多步推理中 Self-Consistency 的两类失败</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Two Failures of Self-Consistency in the Multi-Step Reasoning of LLMs</h1>
+<p class="lead">LLM 多步推理中 Self-Consistency 的两类失败</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">思维链与推理</span><span class="chip">提示技术</span><span class="chip">评测基准</span><span class="chip">可靠性与安全</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a644.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文指出，评价 LLM 多步推理不能只看正确率，还要看自洽性（self-consistency），并提出两类此前未被研究过的自洽性：hypothetical consistency（模型能否预测自己在另一上下文中的输出）与 compositional consistency（把中间子步骤替换为模型自身输出后，最终答案是否保持一致）。作者在文本补全预测、合成算术与 GeoQuery 语义解析任务上，对 GPT-3 各规格与 GPT-4 进行了系统评测。关键结论：小于 davinci-003 的模型在 hypothetical 一致性上接近随机；davinci-003 与 gpt4 在算术任务上的 compositional 一致率不足 50%，语义解析不足 65%；增加模型规模与 in-context 示例数量可改善一致性。对团队而言，这意味着多步 prompt 链或 Agent 流程中回填中间结果可能使最终输出漂移，评测体系中应加入一致性检验。</p>
+<h2>问题</h2><p>LLM 在多步推理任务上的成功通常只以正确性（correctness）衡量，而缺乏对自洽性（self-consistency）的考察。论文要解决的问题是：定义并形式化对多步推理有效性至关重要的两类自洽性——hypothetical consistency 与 compositional consistency——并实证测量 GPT-3/GPT-4 系列模型在这两类一致性上的表现，以揭示 LLM 在组合式任务上泛化差的原因，为&#x27;是否可信任 LLM 在复杂组合任务上的输出&#x27;提供依据。</p>
+<h2>方法</h2><p>论文基于语义等价关系 ∼ 与 prompt 模板替换算子 f 形式化定义两类一致性。Hypothetical 一致性：设计 4 个&#x27;预测自己输出&#x27;的 prompt 模板，将来自 Wikipedia 与 DailyDialog 的 prompt 转为假设性问题，用多选题方式（选项包含模型自身 greedy 解码补全、其他模型的补全与数据集原文续写）测量模型能否识别自己的补全，k-shot 取 1–10 并随机化选项顺序。Compositional 一致性：将复合 prompt 中的子表达式/子树替换为模型对该子步骤的输出，构造 compositional consistency prompts，在 400 个随机嵌套的合成算术表达式（最大嵌套深度 5）与 GeoQuery（400 条 FunQL 语义解析样本）上，对 ada-001/babbage-001/curie-001/davinci-001/davinci-003/gpt4 六个模型以 k=3–10 的 few-shot 提示测量一致率，并分析不一致来源及正确率与一致率的关系。</p>
+<h2>关键结果</h2><p> hypothetical 一致性：所有小于 davinci-003 的 GPT-3 规格表现接近随机；davinci-003 是唯一持续高于随机的模型，但准确率仅 Wikipedia 26%–31%、DailyDialog 30%–37%</p><p> gpt4 在 DailyDialog 上需区分 6 个词时达到 59.9% 的 hypothetical 一致率，但在 Wikipedia 上仅 17.9%–27.4%</p><p> compositional 一致性：davinci-003 与 gpt4 表现最好，但在算术任务上一致率低于 50%，在 GeoQuery 语义解析任务上低于 65%</p><p> 算术任务中 90% 的 compositional 不一致源于子表达式答案正确但最终答案与替换后 prompt 的答案不匹配；GeoQuery 约 59% 的不一致源于子树 parse 未被包含在父树 parse 中，约 41% 源于子节点 parse 本身错误</p><p> 正确率与 compositional 一致率呈明显线性关系（除 davinci-001 外所有模型都略更正确而非一致）；随 in-context 示例数增加各模型在 GeoQuery 上一致性提升，gpt4 在算术任务上显著比 davinci-003 更一致</p>
+<h2>创新点</h2><p>区别于已有工作将一致性定义为 paraphrase 等语义保持变换下的不变性（Elazar et al., 2021）或否定/对称/传递/可加等逻辑一致性（Jang et al., 2022），论文首次形式化并提出 hypothetical 与 compositional 两类新的逻辑一致性变换，指出其对多步推理有效性至关重要且此前未被研究过；并结合 Dziri et al. (2023) 关于 Transformer 在组合任务上误差随平均并行度指数增长的讨论，进一步解释了 LLM 在组合任务上泛化差的原因。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.5 评测与可靠使用</p><p><b>理由：</b>论文直接命中 3.5&#x27;评测与可靠使用&#x27;：它提供了形式化的 LLM 自洽性评测方法（hypothetical/compositional consistency rate）与跨模型实证结论，属于&#x27;LLM 应用评测基准与方法、可靠性、AI 辅助工程的实证研究&#x27;。对以 prompt 链与 Agent 编排为主的团队，compositional 一致性发现直接说明：把模型中间输出回填到下游 prompt 可能得到与直接提问不同的最终答案，这是多步自动化流程（代码生成→审查→修复、文档流水线等）可靠性的核心风险；论文还给出可操作结论——增加 in-context 示例数量与提升模型规模可改善一致性。论文不涉及 Agent 框架、工具调用、多智能体或 RAG，故不命中其他域。</p><p><b>建议动作：</b>作为方法参考存档</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infinite-LLM：基于 DistAttention 与分布式 KVCache 的高效长上下文 LLM 服务系统</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Infinite-LLM: Efficient LLM Service for Long Context with DistAttention and Distributed KVCache</h1>
+<p class="lead">Infinite-LLM：基于 DistAttention 与分布式 KVCache 的高效长上下文 LLM 服务系统</p>
+<div style="margin-top:10px"><span class="lvl lvl-low">low</span><span class="chip">arXiv</span><span class="chip">上下文窗口</span><span class="chip">成本与效率</span><span class="chip">其他</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a173.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>LLM 服务的请求上下文长度高度动态（从 1 到 2000K tokens），静态模型并行与实例内固定资源分配无法同时高效服务长短请求：长请求的 KVCache 耗尽显存、压低 batch size，短请求又因模型被过度切分而计算低效。论文提出 Infinite-LLM 服务系统，将 attention 层从推理实例中解耦：DistAttention 借助 online softmax 式的等价数学变换，把 attention 与 KVCache 沿序列维切成小块分布到多实例计算，解码时只需传输 KB 级 query 而非 GB/TB 级 KVCache；集群 GPU 显存池化后，实例以 debtor/creditor 方式借还显存，由基于性能模型的贪心算法与 gManager/rManager 两层架构统一调度。在 32 张 A100 集群上，相比 vLLM 吞吐提升 1.35-3.4x，支持的上下文长度达 vLLM-multi 的 2x-19x，DistAttention 比 RingAttention 快 7.7x-19.8x。该工作属于推理服务基础设施层优化，与团队应用层能力域无直接对应。</p>
+<h2>问题</h2><p>现有 LLM 服务系统采用静态模型并行与固定资源分配，难以适应请求上下文长度的高度动态性（从 1 到 2000K tokens）：为长请求配置高并行度会使短请求遭受过度模型切分与通信开销；长请求的 KVCache 占满实例显存会压缩 batch size、拉低 GPU 计算利用率，而短请求实例的空闲显存又无法被其他实例上的长请求利用，导致实例内模型并行低效、集群级显存与计算利用率无法同时饱和，整体吞吐受限。</p>
+<h2>方法</h2><p>三项核心创新：(1) DistAttention——受 online softmax 启发对 attention 做等价数学变换，将 attention 与 KVCache 切分为规则小块（MicroAttention）分布到多实例计算，远端实例只需回传 query 向量与两个浮点值（e_j、m_j），聚合计算 FLOPs 不足总量的 1%，避免每步解码传输 GB/TB 级 KVCache；(2) 集群级显存池化——实例分为借入显存的 debtor 与出借显存的 creditor，基于可实验标定的性能模型用贪心算法决定 KVCache 子块在实例间的迁移 placement，并将 KVCache 迁移与本地推理计算重叠以隐藏通信；(3) gManager（集中式全局管理器）+ rManager（与实例同址的分布式管理器）架构，通过 heartbeat、move_kvcache、try_move_kvcache 协议实现松耦合的全局状态跟踪、调度与容错。</p>
+<h2>关键结果</h2><p> 在 4 节点 32 张 A100 (80GB) 集群、上下文长度从几条到 2000K tokens 的负载上，Infinite-LLM 相比 state-of-the-art 方法（vLLM）吞吐提升 1.35-3.4x</p><p> 与 vLLM-multi 相比，短上下文 trace（ShareGPT4）上吞吐提升约 1.35x-1.73x；与 vLLM-single 相比，长上下文 trace（L-Eval 及线上长请求分布）上吞吐提升 1.4x-3.4x</p><p> 相比受单实例显存限制的 vLLM-multi，Infinite-LLM 支持长 2x-19x 的上下文且短序列吞吐相当；相比 vLLM-single，短长度上吞吐高 1.4x-5.3x</p><p> 在 4 GPU、LLaMA2-13B 维度、4K-256K 上下文范围内，DistAttention 比 TP（按 head 划分）快 1%-25%，比 RingAttention 快 7.7x-19.8x</p><p> KVCache 迁移开销：每 decode step 迁移 32 tokens 时实例吞吐下降 8.6%；迁移 16 tokens 时与关闭迁移的实例吞吐完全相同（通信可与计算完全重叠）</p><p> 微基准中一对 debtor/creditor 实例迁移 200 个 KVCache block 时，聚合吞吐从约 6500 tokens/second 提升到约 8800 tokens/second</p>
+<h2>创新点</h2><p>与 ORCA、vLLM、DeepSpeed-FastGen、DistServe 等以整个请求为调度粒度的系统不同，Infinite-LLM 将 attention 层从推理过程中解耦（attention disaggregation），可按 KVCache 任意子块（子序列）粒度跨实例调度，粒度更细、更灵活；与面向训练的 RingAttention/context parallelism 不同，DistAttention 通过等价数学变换避免每步解码传输大块 KVCache，且与原 attention 数学等价、对模型精度无害；与 Sliding Window Attention、H2O、StreamingLLM 等稀疏 KVCache 方案不同，本方案不淘汰 KVCache、不牺牲精度。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>low</p><p><b>命中能力域：</b>无明显对应</p><p><b>理由：</b>论文是 LLM 推理服务的基础设施层系统工作（GPU 集群资源调度、KVCache 显存池化、分布式 attention 内核与通信优化），解决的是&#x27;如何把模型跑得快、跑得省&#x27;，而团队关注的是&#x27;如何把模型用好&#x27;。对照五个能力域：3.1 的上下文工程指应用层的上下文组织、压缩与记忆系统，本文的 KVCache 管理是硬件显存层面的物理资源管理，并非同一层面；3.5 的成本与效率优化指 AI 应用的使用成本与人机协作实证，本文是系统层吞吐优化；3.2/3.3/3.4 完全不涉及。团队不运营自建 GPU 推理集群，也无模型服务改造职责，故判定为基本无关联。</p><p><b>建议动作：</b>暂不相关</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p><h2>证据核查</h2><p class='muted'>1 条证据未在原文中核对到</p></div></div></body></html>

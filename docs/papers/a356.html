@@ -1,0 +1,162 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instruction Bleed：提示组合式 Agentic 系统中的跨模块干扰</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Instruction Bleed: Cross-Module Interference in Prompt-Composed Agentic Systems</h1>
+<p class="lead">Instruction Bleed：提示组合式 Agentic 系统中的跨模块干扰</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">上下文窗口</span><span class="chip">提示技术</span><span class="chip">Agent框架</span><span class="chip">评测基准</span><span class="chip">可靠性与安全</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a356.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文针对提示组合式 Agentic 系统（行为逻辑由多个 markdown/模板模块拼接进同一上下文窗口、由 LLM 通过 attention 解释）中从业者反复报告的失效模式：修改一个提示模块会静默改变语义无关模块的行为。作者将其形式化为 compositional behavioral leakage（CBL），根源是 transformer self-attention 对拼接模块没有形式化隔离边界。他们在部署中的职位评估 Agent（career-ops，Claude Sonnet 4.6，144 次试验）上用三通道扰动协议（容量/内容/格式）验证：仅语义内容通道产生可检测配对效应（Cohen&#x27;s d=0.63），且无任何推荐翻转——这种亚阈值漂移对检查决策的标准 QA 不可见，但会在大量决策中累积并传入下游排序与聚合。论文进一步给出组合一致性、模块交互回归、格式扰动鲁棒性、模型迁移测试四类提示模块回归测试框架，并指出被调研系统均未实现任何一类。</p>
+<h2>问题</h2><p>提示组合式 Agentic 系统中存在从业者所称的 &#x27;instruction bleed&#x27;：编辑一个非目标提示模块会静默改变语义无关的目标模块行为，且无共享变量或可执行依赖可解释；现有 Agent 基准均不测量这种跨模块行为干扰。论文要给出 CBL 的操作化定义、可复用检测协议与可证伪预测，把跨模块干扰测量确立为提示组合式 Agent 评测的必要环节。</p>
+<h2>方法</h2><p>提出 CBL 操作定义：对非目标模块的编辑 e 若引起目标模块行为的可检测配对漂移（配对效应 bootstrap CI 不含零）即判定泄漏。设计可复用三通道扰动协议：C0 基线、C1 容量（追加无关 200 行模块）、C2 内容（向共享规则文件追加语义无关的 &#x27;Professional Chef&#x27; archetype）、C3 格式（保义结构变更）。在部署的职位评估 Agent career-ops 上以 12 个 JD × 3 次独立运行、Claude Sonnet 4.6 共 144 次试验测量 cv-match 分数，用 Cohen&#x27;s d、bootstrap 95% CI（10,000 次重采样）与 Bonferroni 校正的 Wilcoxon 符号秩检验分析；并给出四类回归测试框架与三条可证伪预测（跨模型差异、语义距离梯度、阈值穿越随干预幅度扩展）。</p>
+<h2>关键结果</h2><p> C2 主检验：向共享规则文件追加一个语义无关的 &#x27;Professional Chef&#x27; archetype，使 cv-match 产生配对效应 d=0.63（Δ=+0.17，bootstrap 95% CI [+0.03, +0.31] 不含零），12 个 JD 中 8 个上移；条件内 ICC=0.925</p><p> 对照条件均为零效应：C1（追加无关 200 行模块）d=-0.11、C3（格式扰动）d=-0.29，bootstrap 95% CI 均含零，排除了&#x27;任何新增上下文都降低性能&#x27;与纯格式通道的解释</p><p> 所有条件下均无推荐翻转（no recommendation flips），漂移处于亚阈值区间，对检查决策而非分数分布的标准 QA 不可见</p><p> 实验规模：12 个 JD × 3 次独立运行 × 4 条件 = 144 次试验（Claude Sonnet 4.6）；基线 cv-match 均值 2.72（SD=1.23）</p><p> 成对交互测试复杂度为 O(n²)：OpenClaw 的 10K+ 社区技能产生超过 5000 万个配对组合；被调研的四个系统（OpenClaw、career-ops、OpenHands、aider）均未实现任何一类提示模块回归测试</p>
+<h2>创新点</h2><p>首次把从业者非正式说法 &#x27;instruction bleed&#x27; 形式化为可操作定义与可测量现象，并论证其与已知失效轴（对抗注入、认知退化、多 Agent 故障传播、组合式隐私泄露）正交：AgentDojo、QSAF、MAS-FIRE 等均不测量同一 Agent 初始化上下文中共驻提示模块的同步行为干扰；同时将格式敏感性（Sclar 等）与 proactive interference 从受控任务扩展到真实 Agent 行为输出，并刻画了文本级拼接组合这一系统类（区别于 DecomP、ModularPrompt、PRopS 等通过显式数学或 API 级机制隔离模块的方案）。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.2 提示工程 | 3.3 Agent 架构与工具使用 | 3.5 评测与可靠使用</p><p><b>理由：</b>团队的核心工作方式正是用多个提示模块组装 Agent（代码审查规则、评分 rubric、persona、工作流编排、知识库问答等），这恰是论文定义的 prompt-composed agentic system：提示词资产管理与复用（3.2）、同一上下文窗口内多模块共驻的组织方式（3.1）、单 Agent 执行可靠性（3.3）都直接暴露在 CBL 风险下。论文的 C0-C3 协议与四类回归测试可直接纳入团队的提示词变更流程与 Agent 评测保障体系（3.5），尤其适用于&#x27;改了一个提示模块导致其他功能静默漂移&#x27;这类难以归因的线上问题，以及模型升级后的行为迁移验证。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2606.26356v1  [cs.AI]  24 Jun 2026</p>
+<h2>Instruction Bleed: Cross-Module Interference in Prompt-Composed Agentic Systems</h2>
+<p>Ching-Yu Lin 1 Yifan Liu 1</p>
+<h2>Abstract</h2>
+<p>提示组合式智能体系统（prompt-composed agentic systems）的实践者报告了一种反复出现的失效模式：编辑某一个提示模块会悄然改变其他模块的行为，即使它们之间并不存在共享变量或可执行依赖。我们将这一现象形式化为组合行为泄漏（compositional behavioral leakage, CBL）：即共享同一上下文窗口的模块之间的干扰。CBL 的根源在于架构层面的非隔离性：Transformer 自注意力机制在相互拼接的模块之间不提供任何形式化边界。我们在一个已部署的职位评估智能体（Claude Sonnet 4.6，144 次试验）上，通过一个可复用的三通道协议对 CBL 进行了探测，该协议沿体量（volume）、内容（content）与形式（form）三个通道对非焦点模块施加扰动。只有内容通道产生了可检测的配对效应（Cohen&#x27;s d = 0.63，bootstrap 95% 置信区间不包含零）；没有任何推荐发生翻转——这一亚阈值状态对标准质量保证（QA）而言不可见，</p>
+<h2>1. Introduction</h2>
+<p>提示组合式智能体系统（prompt-composed agentic systems）——即智能体的行为在运行时由自然语言模块组装而成，而非以可执行代码的形式编写，并由大语言模型（LLM）将组合后的上下文解释为智能体的策略——是一种快速增长的部署模式。这些系统的从业者已经报告了一种反复出现的失效模式：编辑一个提示模块会悄然改变某个无关模块的行为，而没有任何共享变量、工具调用或可执行依赖能够解释这一现象（Subrahmanyam, 2025）。因此，风险的所在是组合机制本身，而非任何单个模块。OpenClaw（2026）在生产规模上典型地体现了这种部署模式：379K GitHub 星标和超过 10K 个由社区编写的技能模块，用户将人格定义（SOUL.md）、能力模块（SKILL.md）与编排规则（AGENTS.md）组合成没有任何单一作者能够完全审计的智能体配置。</p>
+<p>1 伊利诺伊大学厄巴纳-香槟分校（University of Illinois Urbana-Champaign），美国伊利诺伊州厄巴纳。通信作者：Yifan Liu &lt; yifan40@illinois.edu &gt; 。</p>
+<p>已被 ICML 2026 智能体 AI 失效模式研讨会（Workshop on Failure Modes in Agentic AI, FAGEN）录用，韩国首尔。版权 2026 归作者所有。</p>
+<p>同样的模式在多种机制选择中反复出现——markdown 约定（Steinberger, 2026; Fern´ andez de Valderrama, 2026）、模板引擎（Wang et al., 2024）以及 Python 类继承（Gauthier, 2023）——其中非平凡的行为逻辑由 LLM 所解释的文本承载，而代码仅限于确定性 I/O（§2，表 1）。</p>
+<p>“将提示模块组合起来就会得到其各自行为的组合”这一架构假设并未得到 transformer 自注意力的支持——后者在组合后的上下文中计算全局成对交互，而不具备任何模块级隔离：&quot;### Persona&quot; 标题只是一种书写约定，而非命名空间边界。前摄干扰（proactive interference）（Wang &amp; Sun, 2025）与覆盖有界组合泛化（coverage-bounded compositional generalization）（Chang et al., 2026）共同预测：每一种全新的模块组合都是一次分布偏移，其行为后果无法从逐模块评估中推导得出。</p>
+<p>然而，目前没有任何现有的智能体基准测试（benchmark）衡量修改一个提示模块是否会悄然改变某个语义上无关模块的行为——这使得模块集偏移下的组合行为成为已部署智能体的首要安全性与可靠性问题。</p>
+<p>我们做出四项贡献：</p>
+<p>1</p>
+<h2>2.1. The Pattern</h2>
+<p>提示组合式智能体系统（prompt-composed agentic system）是指这样一类系统：其中非平凡的行为决策逻辑——评分量规、工作流排序、角色设定、工具选择标准——被编码在由人工编写的文本文件中，由大语言模型（LLM）通过注意力机制加以解释，而非通过运行时（runtime）来执行。</p>
+<h2>2.2. Four Systems</h2>
+<p>表1调研了四个开源的提示组合式智能体系统，其组合机制横跨一个谱系：从 markdown 约定（Steinberger, 2026; Fern´ andez de Valderrama, 2026），经由 Jinja2 模板（Wang et al., 2024），到 Python 类继承（Gauthier, 2023）。在所有情形下，行为逻辑都驻留在由 LLM 通过注意力机制加以解释的文本之中；代码仅处理确定性的 I/O。随着系统走向成熟，组合方式不断向外迁移（约定 → 模板 → 类继承 → 提示管理服务）——这等于默认承认文本层面的组合是脆弱的。然而，部署最广泛的系统（OpenClaw，以及数千个代码仓库中的 AGENTS.md/CLAUDE.md）仍然在文本层面进行组合。附录 A 提供了各系统的逐一描述以及完整的成熟度演进模式。这种脆弱性在何时、以何种方式显现尚缺乏形式化刻画，这正是我们在 §3 中引入相应定义的动因。</p>
+<h2>3.1. Operational Definition</h2>
+<p>设 M = { m 1 , . . . , m n } 为已部署并拼接进大语言模型（LLM）输入上下文的提示模块集合，并令 M ( j ← e ) 表示对非焦点模块 m j 施加编辑 e 之后的同一模块集合。设 s i ( x ; M ) 表示焦点模块 m i 在输入 x 上对应的可观测分数或决策。</p>
+<p>当一项并非旨在影响焦点行为的编辑 e 引起可检测的成对偏移时，我们称该系统表现出组合行为泄漏（compositional behavioral leakage, CBL）：</p>
+<p>其中成对效应的 bootstrap 置信区间不包含零。</p>
+<p>更严格的单例比较 B ( m i |M ) ≈ B ( m i | { m i } ) 是一种组合一致性检验，可视为该回归视角的一个特例。本文聚焦于部署系统场景：对非焦点提示模块的局部编辑是否会在完整部署提示下悄然改变焦点模块的行为。</p>
+<p>CBL 与三种相邻的失效模式不同。组合隐私泄漏（Patil et al., 2025）：多智能体输出聚合暴露敏感信息（隐私 vs. 行为；多智能体 vs. 单智能体拓扑）。认知退化（Atta et al., 2025）：跨多步执行的纵向状态漂移（运行时累积 vs. 初始化干扰）。提示注入：对抗性外部输入颠覆行为（恶意 vs. 意外）。从业者非正式地将 CBL 称为“指令渗漏”（instruction bleed）(Subrahmanyam, 2025)；我们将其形式化。</p>
+<h2>3.2. Mechanisms Predicting CBL</h2>
+<p>Transformer 大语言模型（LLM）的四个特性使 CBL 具有合理性，并产生可检验的预测。每一项特性都贡献了一种独特的干扰机制；它们共同使组合语法本身成为一种行为变量。</p>
+<p>注意力是全局的。Transformer 自注意力在整个输入范围内计算词元之间的两两交互。不存在任何架构机制将注意力限制在单个提示模块内的词元上：### Persona 标题只是一种统计性线索，而非作用域边界，其有效性完全取决于预训练数据中针对类似格式的训练分布先验。因此，基于分隔符的隔离只是一种行为预期，而非保证。这种非隔离特性本身并不能证明任何特定系统中存在渗漏，但它消除了“分隔符分隔的模块会彼此独立行事”这一假设的形式化依据。</p>
+<p>前摄干扰。Wang and Sun (2025) 证明，LLM 的检索准确率随累积的干扰上下文呈对数线性下降，即使目标内容被置于紧邻查询之前的位置也是如此。提示工程缓解措施（“忽略之前的输入”、显式作用域指令）效果有限。较早的提示模块会主动劣化后续模块的处理——这是一种工作记忆瓶颈，单模块测试无法检测到它，因为该干扰仅在组合条件下才会显现。</p>
+<p>2</p>
+<div class="tablewrap"><table><thead><tr><th>System</th><th>Format</th><th>Composition</th><th>Files</th><th>Beh. tests</th></tr></thead><tbody>
+<tr><td>OpenClaw career-ops OpenHands aider</td><td>Markdown Markdown Jinja2 Python</td><td>Convention Convention { % include % } Inheritance</td><td>SOUL/SKILL + 10K skills 18 modes + CLAUDE.md 51 .j2 19 prompts.py</td><td>Manual only Struct. lints Rendering only Parser tests</td></tr>
+</tbody></table></div>
+<p>| System                              | Format                          | Composition                                       | Files                                                             | Beh. tests                                            |</p>
+<figcaption>Table 1. 四个由提示词组合而成的智能体系统，横跨组合机制谱系。没有任何一个在 CI 中断言提示词的行为输出。</figcaption>
+<p>覆盖受限的组合。Chang et al. (2026) 形式化地表明，组合任务中模式匹配的成功与训练分布覆盖度相关（参见 Dziri et al. (2023)）。新颖的模块组合在预训练分布中不太可能存在覆盖，从而迫使模型回退到可能混合无关模块的先验。对于安全关键部署而言，这意味着在隔离机制得到验证之前，未经测试的模块组合必须被视为行为上不可预测。</p>
+<p>格式敏感性。Sclar et al. (2024) 表明，保持语义不变的格式变更可在单个模型内造成高达 76 个百分点的准确率波动。在提示组合的智能体系统中，模块组合的语法本身就是一种行为变量：标题层级、列表格式、空白字符和章节顺序都是独立于语义内容的干扰通道。§3 中的条件 C3 直接探测这一通道。</p>
+<h2>3.3. Existence Proof on a Deployed Agent</h2>
+<p>We test for CBL in career-ops, a prompt-composed jobevaluation agentic system. The focal module scores job descriptions on a 1-5 rubric across multiple weighted dimensions. We measure cv match , the dimension most directly capturing the module&#x27;s core evaluation function: how well a candidate&#x27;s background aligns with the job requirements.</p>
+<p>Conditions. Against an unmodified baseline (C0: the deployed system prompt as shipped), we define three conditions that each perturb the non-focal modules along a distinct channel: C1 (module addition - volume ): baseline + an unrelated 200-line recipe-evaluation module. C2 (semantic modification - content ): baseline with a semantically irrelevant archetype appended to the shared rules file (Appendix B). C3 (format perturbation - form ): baseline with meaning-preserving structural changes (heading levels, emoji markers, section reordering) to non-focal modules.</p>
+<p>C2 is the primary test: the edit is localized to a non-focal behavioral specification, while the measured outcome is the focal cv-match score. Under the system&#x27;s stated modular semantics, the added archetype should not systematically change this score; a paired shift therefore indicates crossmodule interference.</p>
+<div class="tablewrap"><table><thead><tr><th>Cond.</th><th>Mean</th><th>SD</th><th>∆</th><th>d</th><th>95%</th><th>CI ( ∆ )</th></tr></thead><tbody>
+<tr><td>C1 (volume)</td><td>2.69</td><td>1.19</td><td>- 0 . 03</td><td>- 0 . 11</td><td>[ - 0 . 19 ,</td><td>+0 . 11]</td></tr>
+<tr><td>C2 (content)</td><td>2.89</td><td>1.17</td><td>+0 . 17</td><td>0.63</td><td>[+0 . 03 ,</td><td>+0 . 31]</td></tr>
+<tr><td>C3 (form)</td><td>2.64</td><td>1.27</td><td>- 0 . 08</td><td>- 0 . 29</td><td>[ - 0 . 25 ,</td><td>+0 . 08]</td></tr>
+</tbody></table></div>
+<p>| Cond.        |   Mean |   SD | ∆        | d        | 95%          | CI ( ∆ )   |</p>
+<figcaption>Table 2. 各条件下相对于 C0（基线；mean=2.72，SD=1.23）的 cv-match 得分。C2（语义干扰，主要检验）的 bootstrap 95% CI 不包含零；C1 和 C3（对照条件）则不包含。效应量（Cohen&#x27;s d）基于 JD 层面的配对均值计算（N =12）；∆ 的 bootstrap 95% CI 来自 10,000 次重抽样。</figcaption>
+<p>Primary outcome. We pre-specify CV-match as the primary outcome on construct-validity grounds: it is the rubric dimension most directly downstream of the Archetype Detection table modified in C2, so cross-module interference, if present, has its highest theoretical prior of manifesting on this dimension.</p>
+<p>Protocol. Each condition is evaluated on 12 job descriptions × 3 independent runs using Claude Sonnet 4.6 (144 total trials). Effect sizes (Cohen&#x27;s d ) with bootstrap 95% CIs on ∆ (10,000 resamples) serve as the primary analysis; Wilcoxon signed-rank tests with Bonferroni correction provide secondary confirmation.</p>
+<p>Results. Table 2 reports per-condition cv match scores and paired effect sizes with bootstrap 95% CIs.</p>
+<p>C2 is the strongest signal: adding a single irrelevant archetype to the shared rules file produces d = 0 . 63 ( ∆ = +0 . 17 , bootstrap 95% CI [+0 . 03 , +0 . 31] , excluding zero), with 8 of 12 JDs shifting upward. Within-condition ICC for cv-match is 0.925, so paired contrasts at N = 12 retain power for the medium-to-large effect sizes the framework predicts under semantic interventions. This shift satisfies our operational criterion for CBL: a localized edit to a non-focal behavioral specification induces a detectable shift in the focal cv-match score.</p>
+<p>The control conditions sharpen the claim. C1 ( d =</p>
+<p>3</p>
+<p>-0.11）和 C3（d = -0.29）的置信区间（CI）均包含零，这排除了“任何新增上下文都会降低性能”的笼统解释以及格式通道解释，并将检测到的干扰定位于语义内容，从而强化而非削弱 CBL 主张。在任何条件下均未发生推荐翻转——这是该框架预测在小语义干预下会出现的亚阈值状态，将在 §5 中展开论述。</p>
+<h2>4. Related Work</h2>
+<p>智能体故障模式评估。AgentDojo（2024）评估对抗性注入；QSAF（2025）提出针对认知退化的运行时缓解措施；MAS-FIRE（2026）评估多智能体故障传播；Patil 等人（2025）评估组合式隐私泄露。上述工作均未测量单个 Agent 初始化上下文中共存提示模块之间的同步行为干扰。</p>
+<p>提示敏感性与上下文干扰。Sclar 等人（2024）记录了由语义保持的格式变化引起的准确率波动；PI-LLM（2025）表明检索性能呈对数线性下降，且这种下降对提示工程缓解措施具有抵抗性。我们的贡献将这些发现从受控任务扩展到真实 Agent 的行为输出。</p>
+<p>模块化提示。DecomP（2023）通过多次调用编排来分解任务；ModularPrompt（2022）、PRopS（2023）和 Smart MoP（2025）通过软提示以及可微或 softmax 门控实现模块化。这些方法均通过显式的数学或 API 级机制来隔离模块；而我们研究的系统则在文本层面通过拼接进行组合，除注意力机制外没有任何隔离。</p>
+<p>组合泛化。Skill-Mix（2024）表明前沿模型能够组合技能，但随技能数量增加而出现退化。Chang 等人（2026）形式化地表明，组合泛化受训练分布覆盖范围的约束；Dziri 等人（2023）表明 Transformer 在组合深度增加时会坍缩为模式匹配。因此，当新颖的模块组合缺乏覆盖时，模型层面的组合能力不足以保证干净的组合。</p>
+<h2>5. Deployed-System Risks and Predictions</h2>
+<h2>5.1. Regression Testing Framework</h2>
+<h2>6. Conclusion</h2>
+<h2>Impact Statement</h2>
+<p>本文识别了提示组合式智能体系统中的一种失效模式，该模式可能影响基于评分的决策的可靠性。在此类评分会影响个人结果的应用中——如招聘、信贷、分诊——即使是阈下（subthreshold）的行为偏移也会引发公平性方面的担忧。我们的贡献是诊断性的：我们对一种既有现象进行了形式化描述与测量，以便为缓解措施提供支持，而非引入可能被滥用的新能力。</p>
+<h2>A. Extended System Descriptions</h2>
+<p>本附录详细阐述表 1 中总结的四个提示组合式智能体系统，给出各系统的具体描述以及 §2 中所引用的成熟化模式。</p>
+<p>OpenClaw。OpenClaw（2026）（37.9 万 GitHub stars）以最大规模体现了这一范式。用户编写人格文件（SOUL.md）、能力模块（SKILL.md）与编排规则（AGENTS.md），这些内容在启动时被拼接进系统提示词（Steinberger, 2026）。超过 1 万个由社区编写的技能可从公共注册表安装，且技能上下文之间没有任何沙箱隔离——组合完全由大语言模型（LLM）的注意力机制来解析。</p>
+<p>career-ops。career-ops（2026）是一个职位评估流水线，使用 18 个带有显式交叉引用的 markdown 模式文件。所有行为逻辑——原型分类体系、评分细则、决策阈值——均驻留在 markdown 中；代码仅处理输入/输出（I/O）。</p>
+<p>OpenHands。OpenHands（2024）使用 Jinja2 模板化来实现模块化组合，但渲染后的提示词在到达 LLM 之前仍会被拼接进单个上下文窗口。</p>
+<p>aider。aider（2023）将提示词编码为 Python 字符串常量，置于继承自 CoderPrompts 基类的类中。这是其中最接近代码的机制——但这些字符串仍然是通过注意力机制来解释的自然语言行为规范。</p>
+<p>成熟化模式。随着系统走向成熟，组合逐渐从提示词迁移到代码或外部服务中（约定 → 模板 → 类继承 → 提示词管理服务）——这等于默认承认文本层面的组合是脆弱的。然而，部署最广泛的系统（OpenClaw，以及数千个代码仓库中的 AGENTS.md/CLAUDE.md）仍然在文本层面进行组合，其组合在运行时由 LLM 的注意力机制解析，而非通过任何显式的隔离原语。</p>
+<h2>B. Prompt Manipulation: C0 vs. C2</h2>
+<p>由职位评估 Agent 读取的共享规则文件中包含一个“原型检测”（Archetype Detection）表，该表将角色类型映射到关键词信号。条件 C0（基线）使用原始表格；条件 C2 则追加了一个语义上无关的“专业厨师”（Professional Chef）原型，并附带一条针对烹饪领域的评估说明。下方摘录仅展示“原型检测”部分；规则文件的所有其他部分在各条件之间完全相同。</p>
+<h2>C0 - Baseline</h2>
+<h2>C2 - Irrelevant-Archetype Addition</h2></div></div></body></html>

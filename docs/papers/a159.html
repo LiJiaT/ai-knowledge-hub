@@ -1,0 +1,338 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepRAG：让大语言模型逐步思考以按需检索</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>DeepRAG: Thinking to Retrieve Step by Step for Large Language Models</h1>
+<p class="lead">DeepRAG：让大语言模型逐步思考以按需检索</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">RAG与检索</span><span class="chip">思维链与推理</span><span class="chip">工具调用</span><span class="chip">成本与效率</span><span class="chip">评测基准</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a159.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>该论文针对 RAG 在结合推理时的两大痛点——复杂问题难以生成精确的原子化子查询、迭代检索冗余且会引入噪声降低回答质量——提出 DeepRAG 框架，将检索增强推理建模为 Markov Decision Process（MDP）。方法上通过 Binary Tree Search 为每个子查询探索&#x27;参数化知识作答&#x27;与&#x27;外部检索作答&#x27;两条路径，用 Imitation Learning 学习&#x27;子查询生成-原子决策-中间作答&#x27;模式，再用 Chain of Calibration 基于偏好数据校准模型对自身知识边界的认知，从而在每一步动态决定是否检索。实验显示 DeepRAG 在 in-distribution、OOD、时间敏感与异构知识库 QA 上超越现有自适应与推理式 RAG 方法，答案准确率提升 26.4%，同时平均检索次数更低（如 2WMQA 上 0.92 vs 1.25）。对团队而言，这是&#x27;按需检索与知识边界校准&#x27;的代表性工作，其决策建模与评测协议可直接借鉴到知识库问答与 Agent 检索工具调用策略中，但完整复现需要对开源模型做两阶段微调。</p>
+<h2>问题</h2><p>LLM 因参数化知识在时效性、准确性与全面性上的不足而产生严重的事实性幻觉；现有 RAG 在增强推理时面临挑战：复杂查询需要多步分解但 LLM 难以生成精确、原子化的子查询，且迭代检索方法往往对每个子查询都强制检索——不必要的检索冗余、引入噪声并降低回答质量，而让 LLM 自主决定检索时机又因无法准确识别自身知识边界而不可靠。</p>
+<h2>方法</h2><p>将检索增强推理建模为 MDP：状态为当前部分解答（问题+历史子查询与中间答案），动作为子查询生成与原子决策（终止/继续、直接作答/检索），奖励函数在答案正确前提下按检索成本扣减。框架分三步：1) Binary Tree Search：对每个子查询构建二叉树，分别探索基于参数化知识与外部检索的两条作答路径；2) Imitation Learning：用优先队列搜索检索成本最低且最终答案正确的路径，合成数据微调模型（对检索文档做 masked loss 防止学到噪声文本）；3) Chain of Calibration：基于最优路径为每个子查询构造&#x27;直接作答 vs 检索作答&#x27;的偏好对，微调模型校准知识边界、精确判断是否需要检索。另探索了以 GRPO 为目标的 RL 扩展，奖励为答对时按检索次数线性扣减。</p>
+<h2>关键结果</h2><p> 答案准确率提升 26.4%（摘要口径）；引言中报告相对现有方法准确率提升 21.99% 并同时提高检索效率</p><p> 在知识库信息稀疏或缺失的场景下，PopQA 与 WebQuestions 上分别取得 2.63 与 4.57 的 F1 提升</p><p> 检索效率：2WMQA 平均检索次数 0.92（对比基线 1.25），WebQuestions 0.12（对比 0.36），以更低检索成本取得更高准确率</p><p> 问题分解分析：多数问题需 3-5 步分解，检索尝试集中在 0-2 轮；子查询中代词与连词更少，分解更简洁</p><p> 知识边界相关性分析：在 F1、balanced accuracy、MCC 指标上优于 FLARE、DRAGIN、TAARE 等自适应检索方法，检索决策与参数化知识边界相关性更强</p><p> RL（GRPO）设置下，2WikiMultihopQA 的 F1 随训练逐步提升且平均检索次数下降</p><p> 与强基线对比：平均性能超过 QwQ-32B-preview 与 gpt-4o-turbo，尤其在时间敏感 QA 任务上</p><p> 消融实验：最小检索成本路径选择优于最大成本与随机选择；基于最优路径节点构造偏好对优于全节点构造与句级偏序对（后者导致过度依赖内部知识、性能下降）</p>
+<h2>创新点</h2><p>与三类已有自适应 RAG 不同：分类器式方法需额外训练线性头，置信度式方法依赖对阈值敏感的不确定性指标，LLM 自主决策式方法难以准确识别知识边界——DeepRAG 不引入额外参数、不依赖不可靠的不确定性度量，而是利用 LLM 生成能力通过二叉树搜索合成数据来显式探索知识边界。与 Self-RAG、Auto-RAG、AirRAG 等依赖大量检索或采样开销的方法不同，DeepRAG 在奖励中显式优化检索效率，并以端到端方式训练任意模型&#x27;何时检索、检索什么&#x27;；与 RL 式检索增强方法忽略奖励中检索效率不同，其奖励设计同时兼顾正确性与检索成本。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.3 Agent 架构与工具使用 | 3.5 评测与可靠使用</p><p><b>理由：</b>论文核心是 RAG/检索增强的上下文组织策略，直接命中 3.1（RAG/检索增强、结构化上下文组织）；其&#x27;原子决策&#x27;本质是 Agent loop 中每一步是否调用检索工具的工具调用时机决策，与 3.3 的工具调用与执行可靠性相关；同时论文显式以检索成本为优化目标，并给出用 CoT 结果作为参数化知识指标、以 F1/balanced accuracy/MCC 评估检索决策质量的评测协议，对应 3.5 的成本效率优化与评测方法。团队构建知识库问答与研发提效流程时，&#x27;何时检索、何时不检索&#x27;是直接影响质量与成本的核心问题，该论文提供了系统化的建模、训练与评测方案。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2502.01142v2  [cs.AI]  2025年6月8日</p>
+<h2>DeepRAG: Thinking to Retrieve Step by Step for Large Language Models</h2>
+<p>Xinyan Guan 1,2，Jiali Zeng 3，Fandong Meng 3，Chunlei Xin 1,2，Yaojie Lu 1，Hongyu Lin 1，Xianpei Han 1，Le Sun 1，Jie Zhou 3</p>
+<p>1 中国科学院软件研究所中文信息处理实验室</p>
+<p>2 中国科学院大学</p>
+<p>腾讯公司微信AI模式识别中心，中国</p>
+<p>{guanxinyan2022,chunlei2021,hongyu,luyaojie,xianpei,sunle}@iscas.ac.cn {lemonzeng,fandongmeng,withtomzhou}@tencent.com</p>
+<h2>Abstract</h2>
+<p>大语言模型（Large Language Models, LLMs）已展现出卓越的推理能力，但由于其参数化知识在时效性、准确性和全面性方面的局限，其实际应用受到严重事实性幻觉的制约。与此同时，通过推理来增强检索增强生成（Retrieval-Augmented Generation, RAG）仍然具有挑战性，原因在于任务分解低效和检索冗余，这会引入噪声并降低响应质量。本文提出 DeepRAG，该框架将检索增强推理建模为马尔可夫决策过程（Markov Decision Process, MDP），从而实现合理且自适应的检索。通过迭代地分解查询，DeepRAG 在每一步动态决定是检索外部知识还是依赖参数化推理。实验表明，DeepRAG 提升了检索效率，并将答案准确率提高了 26.4%，证明了其在增强检索增强推理方面的有效性。1</p>
+<h2>1 Introduction</h2>
+<p>大语言模型（Large Language Models, LLMs）在推理方面已展现出可观的潜力（Plaat et al., 2024）。然而，其在容量与能力上的局限导致了显著的事实性幻觉问题，这源于其参数化知识在时效性、准确性和全面性方面所面临的挑战（Zhang et al., 2023; Huang et al., 2023）。为缓解这些问题，检索增强生成（Retrieval-Augmented Generation, RAG）作为一种有前景的方法被提出。通过整合来自知识库或搜索引擎的相关信息，RAG 提升了模型响应的事实准确性（Zhao et al., 2024）。</p>
+<p>然而，将推理融入 RAG 仍面临若干挑战（Gao et al., 2025）。一个重要问题是，复杂查询往往需要多步分解才能建立连贯的推理过程（Radhakrishnan et al., 2023; Guan et al., 2024a）。迭代检索被提出作为一种解决方案，用于持续更新检索结果，以应对生成过程中出现的动态信息需求（Yue et al., 2024; Wang et al., 2025）。尽管如此，LLMs 常常难以生成精确且原子化的子查询，而这类子查询对于实现更有效的检索和问题分解至关重要（Wu et al., 2024）。从 RAG 的角度来看，迭代检索理想情况下应以自适应方式，基于当前问题和已有信息生成下一个原子查询。如图 1 所示，该过程在逻辑上环环相扣、逐步推进。具体而言，步骤 2-4 中查找每部电影时长的目标，正是源自步骤 1 中对《指环王》系列三部曲片名的识别。</p>
+<p>1 https://github.com/gxy-gxy/DeepRAG</p>
+<figure><img src="assets/a159/figures/fig_1.png" alt="Figure 1: 人类思维过程与DeepRAG的对应关系。具体而言，检索叙事（retrieval narrative）通过生成基于先前内容寻求额外信息的子查询来确保结构化的工作流程，而原子决策（atomic decision）则针对每个子查询动态决定是检索外部知识还是仅依赖参数化知识。" loading="lazy"></figure>
+<figcaption>Figure 1: 人类思维过程与DeepRAG的对应关系。具体而言，检索叙事（retrieval narrative）通过生成基于先前内容寻求额外信息的子查询来确保结构化的工作流程，而原子决策（atomic decision）则针对每个子查询动态决定是检索外部知识还是仅依赖参数化知识。</figcaption>
+<p>此外，检索并非总是必需的（Jeong et al., 2024）。有些查询依赖外部知识（步骤 2-4），而另一些则可以仅通过 LLM 的推理能力来解决（步骤 5 需要总结先前信息）。而且，LLMs 已展现出自身即可充当知识库的能力（Petroni et al., 2019）（例如步骤 1 中的三个电影片名便广为人知）。不必要的检索可能造成冗余，引入噪声，并降低所生成响应的质量（Chen et al., 2023; Tan et al., 2024; Yu et al., 2022）。</p>
+<p>为解决这些问题，我们提出了 DeepRAG，这是一个受人类按需搜索互联网的方式启发的新框架。该框架旨在通过将检索过程建模为马尔可夫决策过程（MDP），来增强检索增强生成（Retrieval-Augmented Generation, RAG）中的推理能力。DeepRAG 包含两个主要组件：检索叙事（retrieval narrative）和原子决策（atomic decisions），二者共同构建了一个策略化且自适应的检索系统。如图 1 所示，检索叙事通过生成子查询来确保结构化的工作流程，这些子查询基于先前内容寻求额外信息。对于每个子查询，原子决策会动态决定是检索外部知识，还是仅依赖大语言模型（LLM）的参数化知识。</p>
+<p>如图 2 所示，我们的框架由三个组件构成：1）二叉树搜索（Binary Tree Search），针对与给定问题相关的每个子查询构建一棵二叉树，并基于参数化知识或外部知识探索路径。2）模仿学习（Imitation Learning），基于二叉树搜索提取能够以最小检索代价得到正确最终答案的推理过程，使模型学会“子查询生成 - 原子决策 - 中间答案”这一模式。3）校准链（Chain of Calibration），通过细化每个原子决策来校准 LLM 的内部知识，使其能够就检索的必要性做出准确的原子决策。通过显式增强 LLM 识别自身知识边界的能力，我们可以以端到端的方式训练任意模型，使其能够动态决定何时检索以及检索什么内容。</p>
+<p>我们在分布内（in-distribution）、分布外（out-of-distribution）、时间敏感（time-sensitive）以及异构知识库数据集上验证了 DeepRAG 的有效性。实验结果表明，DeepRAG 显著优于现有方法，准确率提升了 21.99%，同时还提高了检索效率。进一步分析表明，DeepRAG 的检索决策与参数化知识之间表现出更强的相关性，这意味着其对知识边界的校准更为有效。</p>
+<h2>2 Related Work</h2>
+<p>自适应检索增强生成（Adaptive Retrieval-Augmented Generation）现有的自适应 RAG 方法大致可分为三类：基于分类器的方法（Cheng et al., 2024; Jeong et al., 2024），这类方法需要为检索决策额外训练线性头（linear head）；基于置信度的方法（Jiang et al., 2023; Su et al., 2024; Dhole, 2025），这类方法严重依赖与阈值相关的不确定性度量；以及基于大语言模型（LLM）的方法（Asai et al., 2023; Zhang et al., 2024），这类方法虽然能够生成检索决策，但往往无法准确识别自身的知识边界，因此将检索时机决策交由模型来判断并不可靠。我们的方法利用 LLM 固有的生成能力，在 RAG 场景中探索知识边界。这一设计在保持模型原生生成能力的同时，既无需引入额外参数，也无需依赖不可靠的不确定性度量。</p>
+<h2>Reasoning in Retrieval-Augmented Generation</h2>
+<p>RAG 领域的最新进展日益强调推理能力的整合。Search-o1（Li et al., 2025）将检索融入推理过程以构建智能体系统，但其应用仅限于推理模型（Chen et al., 2025）。Self-RAG（Asai et al., 2023）和 Auto-RAG（Yu et al., 2024）通过在检索增强框架内进行自动数据合成来增强推理能力，而 AirRAG（Feng et al., 2025）则将蒙特卡洛树搜索与自洽性技术相结合。然而，这些方法往往严重依赖于大量的检索或采样开销。更近期的研究则探索了利用强化学习来提升检索质量（Jin et al., 2025; Song et al., 2025; Gao et al., 2024），但这些方法在奖励函数中普遍忽视了检索效率。相比之下，DeepRAG 提供了一种灵活的端到端解决方案，使任意模型能够基于其不断演进的推理过程，按需逐步检索信息。</p>
+<p>知识边界　LLM 难以准确区分自己知道什么与不知道什么（Yin et al., 2023; Kapoor et al., 2024a; Yin et al., 2024）。通常需要额外的微调（Kapoor et al., 2024b）或精确的探测（Cheng et al., 2024）来校准模型的认知。我们的方法在 RAG 场景中探索知识边界。</p>
+<figure><img src="assets/a159/figures/fig_2.png" alt="Figure 2: DeepRAG概览，我们的框架包含三个步骤：(1) 二叉树搜索（Binary Tree Search）、(2) 模仿学习（Imitation Learning）和 (3) 校准链（Chain of Calibration）。给定一组有监督数据集，我们首先使用二叉树搜索来合成用于模仿学习的数据，使模型学习有效的检索模式。接下来，我们采用二叉树搜索生成偏好数据，进一步校准LLM对自身知识边界的感知。" loading="lazy"></figure>
+<figcaption>Figure 2: DeepRAG概览，我们的框架包含三个步骤：(1) 二叉树搜索（Binary Tree Search）、(2) 模仿学习（Imitation Learning）和 (3) 校准链（Chain of Calibration）。给定一组有监督数据集，我们首先使用二叉树搜索来合成用于模仿学习的数据，使模型学习有效的检索模式。接下来，我们采用二叉树搜索生成偏好数据，进一步校准LLM对自身知识边界的感知。</figcaption>
+<h2>3 Thinking to Retrieve Step by Step</h2>
+<p>在本节中，我们介绍所提出的方法 DeepRAG。DeepRAG 的核心思想是将问题分解、原子决策与最终答案生成的过程建模为马尔可夫决策过程（Markov Decision Process, MDP）。给定一组有监督数据集，我们首先利用二叉树搜索合成用于模仿学习的数据，使模型能够学习有效的检索模式。随后，我们采用二叉树搜索生成偏好数据，进一步校准 LLM 对自身知识边界的认知。在接下来的小节中，我们将详细描述 DeepRAG 的各个组成部分。</p>
+<h2>3.1 Overview of the MDP Modeling</h2>
+<h2>3.2 Binary Tree Search</h2>
+<p>基于上述公式化表述，大语言模型（LLM）将给定问题迭代地分解为若干子查询（subquery），每个子查询均由先前获取的信息推导而来。详细的生成指令在附录 A.2 中给出，答案格式如下。</p>
+<p>Answer format Question : &lt;Question&gt; Follow up : &lt;Subquery1&gt; Let&#x27;s search the question in Wikipedia. Context: &lt;Paragraph Text&gt; Intermediate answer : &lt;Intremediate Answer1&gt; Follow up : &lt;Subquery2&gt; Intermediate answer : &lt;Intermediate Answer2&gt; ...... So the final answer is : &lt;Answer&gt;</p>
+<p>随后，我们实现二叉树搜索（binary tree search），为每个子查询构建整合了不同检索策略的推理路径。如图 2 所示，给定一个问题，模型会生成第 i 个子查询，并探索两种作答策略：直接利用参数化知识（蓝色节点），或检索外部文档（绿色节点）。因此，对于与给定问题相关的每个子查询，我们都可以构建一棵二叉树，并探索基于参数化知识或外部知识的路径。</p>
+<h2>3.3 Imitation Learning</h2>
+<p>我们提出了一种利用二叉树来识别最优推理过程的算法，该推理过程能够在最小化检索成本的同时导向正确的最终答案，对应于 3.1 节中定义的最高奖励。基于合成得到的最优推理数据，我们对模型进行微调，以改进其终止决策与原子决策，同时增强其查询分解能力并生成忠实的中间答案。</p>
+<p>数据合成 如 Alg. 1 所示，我们采用优先队列，依据检索成本来维护推理轨迹。这使得我们能够通过迭代地构建并评估潜在推理路径来高效地探索它们，直至找到正确答案，或在给定约束条件下穷尽所有可行选项。对于在穷尽所有选项后仍无法获得正确答案的实例，我们将其丢弃。</p>
+<p>通过上述合成过程，所得到的训练数据集包含自适应推理过程，可用于帮助任意大语言模型（LLM）增强其检索增强生成（RAG）能力。</p>
+<h2>Algorithm 1 Data Construction for Stage I</h2>
+<p>输入：问题 x，答案 y，语言模型 M，检索器 R，最大历史长度 T</p>
+<p>输出：最优推理过程 s ∗ 或 null</p>
+<p>1: 初始化优先队列 PQ ← { ([ x ], 0) } ▷ (轨迹, 检索次数)</p>
+<p>2: while PQ 非空 do</p>
+<p>3: ( h , r ) ←PQ . dequeue () ▷ 获取检索次数最低的轨迹</p>
+<p>4: q ←M ( h ) ▷ 子查询生成</p>
+<p>5: if ShouldAnswer ( q ) or length ( h ) &gt; T then</p>
+<p>6: o ←M ( h , q ) ▷ 最终答案</p>
+<p>7: if IsEqual ( o , y ) then return h</p>
+<p>8: else</p>
+<p>9: a ←M ( h , q ) ▷ 直接答案</p>
+<p>10: PQ . enqueue (([ h , ( q , a )], r ))</p>
+<p>11: d ←R ( q ) ▷ 检索文档</p>
+<p>12: a ←M ( h , q , d ) ▷ 检索答案</p>
+<p>13: PQ . enqueue (([ h , ( q , ( d , a ))], r +1))</p>
+<p>14: return null</p>
+<p>训练目标 我们对检索到的文档实现了掩码损失函数，以防止模型学习到可能对其性能产生负面影响的无关或含噪文本。详细的目标函数如附录 B.1 所示。</p>
+<h2>3.4 Chain of Calibration</h2>
+<p>基于第 3.1 节中的马尔可夫过程，我们确定了 DeepRAG 的四个关键优化方面：终止、原子决策、查询分解以及中间答案生成。与其他方面不同，原子决策要求模型识别自身的知识边界，以做出精确的判断。</p>
+<p>我们提出了一种针对每个子查询动态优化原子决策的方法，而不是在完整推理路径上训练大语言模型（LLM）。我们的方法包含两个关键组成部分：（1）合成偏好数据，以确定何时需要检索；（2）利用这些数据，通过校准链（Chain of Calibration）训练对 LLM 进行微调，以增强其基于内部知识边界做出明智原子决策的能力。</p>
+<p>合成偏好数据 首先，我们基于 Alg. 1，使用在阶段 I 中训练得到的模型识别出一条检索次数最少的最优路径。该路径为每个子查询提供了最优的原子决策，即确定是否需要检索。沿此路径，我们为每个子查询构建偏好对，以标示首选的检索选择。例如，在图 2 中，最优路径可能建议使用参数化知识回答第一个子查询，而对第二个子查询则需要进行文档检索。据此，我们生成偏好对：对第一个子查询偏向参数化知识，对第二个子查询偏向检索。这一过程使 LLM 学会何时检索外部信息，从而提升其最大化利用参数化知识的能力，并减少不必要的检索。</p>
+<p>校准链目标 我们在合成的偏好数据上，使用校准链目标对 LLM 进行微调。给定第 i 个子查询和状态 s i = [ x , ( q 1 , r 1 ), · · · , ( q i - 1 , r i - 1 )] ，我们有两个不同的中间答案 r 1 i = a 1 i 和 r 2 i = ( d i , a 2 i ) 。基于上述合成过程，我们可以标记出哪个 r i 是更优的，并对其进行优化。详细公式如附录 B.2 所示。</p>
+<h2>4.1 Datasets</h2>
+<p>我们在实验中使用了六个开放域问答（QA）数据集。我们将训练数据集视为分布内（in-distribution）数据，将未见过的数据集视为分布外（out-of-distribution）数据。分布内数据集包括 HotpotQA (Yang et al., 2018) 和 2WikMultihopQA (Ho et al., 2020)，分布外数据集由 CAG (Pan et al., 2024)、PopQA (Mallen et al., 2022)、WebQuestions (Berant et al., 2013) 和 MuSiQue (Trivedi et al., 2022) 组成。具体而言，我们采用 CAG 的时间敏感子集来评估时序推理能力。此外，WebQuestions 构建于 Freebase 之上，用于评估当知识库中可能缺失相关信息时模型的鲁棒性。</p>
+<h2>4.2 Baselines</h2>
+<p>我们使用以下基线来评估性能：CoT (Wei et al., 2022) 和 CoT*，二者均采用从训练数据集中提取的 8-shot 示例。星号 (*) 表示模型输出是使用与训练 DeepRAG 所用的相同数据进行训练得到的。CoT-Retrieve 和 CoT-Retrieve* 则基于查询，利用检索到的相关文档对上下文中的八个示例进行扩充。IterDRAG (Yue et al., 2024) 指基于上下文学习（in-context learning）逐步分解问题和答案。AutoRAG (Yu et al., 2024) 使用训练好的模型迭代地分解问题并检索相关文档以进行回答。Search-o1 (Li et al., 2025) 利用特殊标记来提示推理模型根据需要自主调用检索。</p>
+<p>UAR (Cheng et al., 2024) 采用一个训练好的分类器来确定何时进行检索。FLARE (Jiang et al., 2023) 和 DRAGIN (Su et al., 2024) 是基于置信度的方法，它们根据词元（token）重要性和不确定性来决定检索时机。TAARE (Zhang et al., 2024) 则允许大语言模型（LLM）自行判断何时需要检索。</p>
+<h2>4.3 Implementation Details</h2>
+<p>我们在两个问答（QA）数据集上训练目标模型：HotpotQA 和 2WikiMultihopQA。对于模仿学习，我们从每个数据集中随机采样 4,000 个样本。为了增强模型的问题分解和基于上下文的生成能力，我们采用 Qwen-2.5-72B 来生成图 2 中的灰色节点（查询分解）和绿色节点（检索到的答案），并使用目标模型生成蓝色节点（参数化答案），以进行数据合成。对于校准链（chain of calibration），我们从每个数据集中额外采样 1,000 个样本。性能采用精确匹配（Exact Match, EM）和 F1 分数进行评估。</p>
+<p>遵循 Su et al. (2024) 的做法，我们采用 BM25 进行检索，并使用 Wikipedia 2 作为知识库。对于 CAG 中的时效性问题，我们使用数据集提供的最新段落作为知识库。我们选择 Llama-3-8BInstruct (Dubey et al., 2024)、Qwen-2.5-7B 和 Qwen-2.5-32B (Yang et al., 2024) 作为目标模型。为了实现 Search-o1，我们采用 DeepSeek-R1 (Guo et al., 2025) 的蒸馏系列模型，因为该方法依赖于推理模型。</p>
+<h2>4.4 Overall Results</h2>
+<p>表1的结果表明，DeepRAG在不同场景下均展现出卓越的性能与鲁棒性。</p>
+<p>DeepRAG通过逐步思考进行检索，在大多数数据集上展现出卓越性能。我们的方法在各种骨干模型和模型规模上均持续优于现有方法。与基于推理的RAG基线和自适应RAG基线相比，DeepRAG在所有数据集上均表现更优，证明了结构化检索叙事与按需原子决策的有效性。具体而言，IterDRAG有限的表现凸显了同时学习查询分解与忠实回答的必要性。诸如FLARE等基于置信度的方法由于依赖不稳定的预定义指标，难以确定最优检索时机。此外，我们观察到基于置信度的方法存在不稳定问题，其性能对阈值选择高度敏感。同时，诸如AutoRAG等迭代检索方法在未找到高度相关信息时，往往会陷入持续的检索循环。</p>
+<p>2 https://dl.fbaipublicfiles.com/dpr/wikipedia_ split/psgs_w100.tsv.gz</p>
+<div class="tablewrap"><table><thead><tr><th>Types.</th><th>Methods.</th><th>in-distribution.Hotpot QA.EM</th><th>in-distribution.Hotpot QA.F1</th><th>in-distribution.2WikiMultihopQA.EM</th><th>in-distribution.2WikiMultihopQA.F1</th><th>out-of-distribution.CAG.EM</th><th>out-of-distribution.CAG.F1</th><th>out-of-distribution.PopQA.EM</th><th>out-of-distribution.PopQA.F1</th><th>out-of-distribution.Web Question.EM</th><th>out-of-distribution.Web Question.F1</th><th>out-of-distribution.MuSiQue.EM</th><th>out-of-distribution.MuSiQue.F1</th><th>Avg</th></tr></thead><tbody>
+<tr><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td><td>Llama-3-8B</td></tr>
+<tr><td></td><td>CoT</td><td>27.20</td><td>37.75</td><td>28.20</td><td>34.85</td><td>7.17</td><td>10.41</td><td>21.20</td><td>25.33</td><td>25.20</td><td>40.56</td><td>13.70</td><td>22.97</td><td>24.54</td></tr>
+<tr><td></td><td>CoT-Retrieve</td><td>34.90</td><td>46.85</td><td>35.80</td><td>43.41</td><td>55.45</td><td>64.08</td><td>32.80</td><td>45.87</td><td>22.90</td><td>39.22</td><td>19.10</td><td>28.18</td><td>39.05</td></tr>
+<tr><td></td><td>CoT*</td><td>21.80</td><td>31.69</td><td>25.60</td><td>30.89</td><td>5.30</td><td>7.58</td><td>23.10</td><td>25.31</td><td>26.80</td><td>40.20</td><td>4.80</td><td>13.85</td><td>21.41</td></tr>
+<tr><td>Reasoning</td><td>CoT-Retrieve*</td><td>22.50</td><td>32.15</td><td>23.70</td><td>29.21</td><td>44.86</td><td>55.69</td><td>38.70</td><td>45.64</td><td>17.60</td><td>29.20</td><td>5.70</td><td>11.60</td><td>29.71</td></tr>
+<tr><td>Reasoning</td><td>IterDRAG</td><td>23.20</td><td>30.95</td><td>19.60</td><td>24.80</td><td>38.32</td><td>46.18</td><td>22.70</td><td>34.53</td><td>15.90</td><td>26.79</td><td>12.40</td><td>17.75</td><td>26.09</td></tr>
+<tr><td>Reasoning</td><td>Auto-RAG</td><td>25.80</td><td>36.09</td><td>23.00</td><td>30.09</td><td>49.22</td><td>59.61</td><td>27.80</td><td>42.02</td><td>17.40</td><td>32.94</td><td>19.10</td><td>28.33</td><td>32.62</td></tr>
+<tr><td>Reasoning</td><td>Search-o1</td><td>14.80</td><td>24.08</td><td>22.20</td><td>27.10</td><td>3.43</td><td>6.61</td><td>10.30</td><td>13.54</td><td>15.30</td><td>29.60</td><td>5.40</td><td>11.98</td><td>15.36</td></tr>
+<tr><td>Adaptive</td><td>FLARE</td><td>23.80</td><td>32.88</td><td>30.30</td><td>37.45</td><td>34.89</td><td>43.45</td><td>28.80</td><td>40.61</td><td>28.80</td><td>40.61</td><td>14.50</td><td>23.57</td><td>31.64</td></tr>
+<tr><td></td><td>DRAGIN</td><td>27.60</td><td>38.05</td><td>29.10</td><td>35.68</td><td>4.05</td><td>7.18</td><td>22.60</td><td>28.53</td><td>21.20</td><td>38.72</td><td>11.80</td><td>19.97</td><td>23.71</td></tr>
+<tr><td></td><td>UAR</td><td>29.70</td><td>40.66</td><td>34.80</td><td>42.40</td><td>52.96</td><td>61.53</td><td>33.00</td><td>45.95</td><td>22.70</td><td>39.10</td><td>19.10</td><td>28.38</td><td>37.52</td></tr>
+<tr><td></td><td>TAARE</td><td>30.60</td><td>41.43</td><td>35.20</td><td>42.85</td><td>52.96</td><td>61.59</td><td>33.20</td><td>46.01</td><td>23.40</td><td>39.56</td><td>18.60</td><td>27.55</td><td>37.75</td></tr>
+<tr><td>Ours</td><td>DeepRAG-Imi</td><td>35.10</td><td>46.59</td><td>47.20</td><td>52.33</td><td>50.47</td><td>59.55</td><td>43.60</td><td>48.50</td><td>30.00</td><td>41.76</td><td>22.30</td><td>30.46</td><td>42.32</td></tr>
+<tr><td>Ours</td><td>DeepRAG</td><td>40.70</td><td>51.54</td><td>48.10</td><td>53.25</td><td>52.96</td><td>61.92</td><td>42.50</td><td>47.80</td><td>32.70</td><td>45.24</td><td>22.50</td><td>30.40</td><td>44.13</td></tr>
+<tr><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td><td>Qwen-2.5-7B</td></tr>
+<tr><td>Resaoning</td><td>CoT</td><td>18.90</td><td>27.81</td><td>23.40</td><td>28.97</td><td>3.12</td><td>5.71</td><td>15.20</td><td>19.20</td><td>18.30</td><td>34.86</td><td>5.60</td><td>13.12</td><td>17.85</td></tr>
+<tr><td></td><td>CoT-Retreive</td><td>24.90</td><td>34.78</td><td>18.60</td><td>23.44</td><td>41.43</td><td>51.47</td><td>27.30</td><td>41.20</td><td>15.10</td><td>29.84</td><td>6.70</td><td>15.10</td><td>27.49</td></tr>
+<tr><td></td><td>CoT*</td><td>17.60</td><td>26.15</td><td>25.10</td><td>29.62</td><td>3.12</td><td>5.62</td><td>7.90</td><td>11.06</td><td>15.60</td><td>32.45</td><td>4.70</td><td>13.40</td><td>16.03</td></tr>
+<tr><td></td><td>CoT-Retrieve*</td><td>23.40</td><td>32.29</td><td>22.40</td><td>27.51</td><td>43.30</td><td>54.51</td><td>26.60</td><td>35.46</td><td>13.80</td><td>25.60</td><td>6.20</td><td>12.85</td><td>26.99</td></tr>
+<tr><td></td><td>IterDRAG</td><td>13.70</td><td>26.84</td><td>9.30</td><td>20.47</td><td>21.81</td><td>39.59</td><td>18.00</td><td>31.44</td><td>12.50</td><td>26.95</td><td>9.20</td><td>17.25</td><td>20.59</td></tr>
+<tr><td></td><td>Search-o1</td><td>11.60</td><td>16.95</td><td>22.00</td><td>25.02</td><td>3.43</td><td>4.78</td><td>4.40</td><td>7.61</td><td>7.70</td><td>19.97</td><td>2.10</td><td>7.48</td><td>11.09</td></tr>
+<tr><td></td><td>FLARE</td><td>23.40</td><td>32.06</td><td>21.80</td><td>26.51</td><td>34.89</td><td>42.62</td><td>19.00</td><td>28.24</td><td>16.10</td><td>31.89</td><td>8.40</td><td>15.15</td><td>25.00</td></tr>
+<tr><td></td><td>DRAGIN</td><td>16.70</td><td>24.60</td><td>12.40</td><td>16.76</td><td>3.43</td><td>5.45</td><td>12.00</td><td>15.80</td><td>17.40</td><td>32.43</td><td>4.20</td><td>7.98</td><td>14.10</td></tr>
+<tr><td>Adaptive</td><td>UAR</td><td>24.50</td><td>34.22</td><td>23.90</td><td>28.20</td><td>34.89</td><td>43.92</td><td>27.00</td><td>40.47</td><td>16.60</td><td>32.28</td><td>7.10</td><td>15.62</td><td>27.39</td></tr>
+<tr><td></td><td>TAARE</td><td>25.30</td><td>35.03</td><td>21.30</td><td>25.67</td><td>40.81</td><td>50.78</td><td>27.00</td><td>40.92</td><td>18.20</td><td>33.14</td><td>6.90</td><td>15.46</td><td>28.38</td></tr>
+<tr><td></td><td>DeepRAG-Imi</td><td>30.40</td><td>39.44</td><td>32.00</td><td>38.32</td><td>47.98</td><td>56.99</td><td>37.50</td><td>40.72</td><td>23.90</td><td>38.62</td><td>16.50</td><td>24.67</td><td>35.59</td></tr>
+<tr><td>Ours</td><td>DeepRAG</td><td>32.10</td><td>41.14</td><td>40.40</td><td>44.87</td><td>51.09</td><td>59.76</td><td>40.60</td><td>43.19</td><td>24.20</td><td>38.83</td><td>19.50</td><td>32.35</td><td>39.00</td></tr>
+<tr><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td><td>Qwen-2.5-32B</td></tr>
+<tr><td></td><td>CoT</td><td>20.6</td><td>30.62</td><td>24.4</td><td>30.94</td><td>3.12</td><td>5.42</td><td>10.9</td><td>14.45</td><td>9.7</td><td>26</td><td>9.5</td><td>18.26</td><td>16.99</td></tr>
+<tr><td></td><td>CoT-Retrieve</td><td>28.6</td><td>39.43</td><td>27.9</td><td>36.73</td><td>39.56</td><td>49.97</td><td>33.8</td><td>45.91</td><td>17.2</td><td>34.15</td><td>12.9</td><td>21.98</td><td>32.34</td></tr>
+<tr><td>Reasoning</td><td>Iter-DRAG</td><td>22.9</td><td>38.26</td><td>19.6</td><td>35.70</td><td>33.02</td><td>45.61</td><td>20.3</td><td>33.2</td><td>13.3</td><td>27.57</td><td>17.6</td><td>27.8</td><td>27.91</td></tr>
+<tr><td></td><td>Search-o1</td><td>34</td><td>45.64</td><td>29.1</td><td>35.12</td><td>19</td><td>24.35</td><td>23.1</td><td>30.69</td><td>17.9</td><td>35.11</td><td>16.4</td><td>25.6</td><td>28.00</td></tr>
+<tr><td>Ours</td><td>DeepRAG</td><td>36.2</td><td>46.90</td><td>46.3</td><td>50.50</td><td>52.02</td><td>61.42</td><td>46.3</td><td>49.2</td><td>28.1</td><td>43.27</td><td>19.60</td><td>27.47</td><td>42.27</td></tr>
+</tbody></table></div>
+<p>| Types.       | Methods.      | in-distribution.Hotpot QA.EM   | in-distribution.Hotpot QA.F1   | in-distribution.2WikiMultihopQA.EM   | in-distribution.2WikiMultihopQA.F1   | out-of-distribution.CAG.EM   | out-of-distribution.CAG.F1   | out-of-distribution.PopQA.EM   | out-of-distribution.PopQA.F1   | out-of-distribution.Web Question.EM   | out-of-distribution.Web Question.F1   | out-of-distribution.MuSiQue.EM   | out-of-distribution.MuSiQue.F1   | Avg          |</p>
+<figcaption>Table 1: DeepRAG与其他基线方法在五个基准上的总体实验结果。每个数据集中的最佳/次佳分数分别以粗体/下划线标出。DeepRAG-Imi（阶段I）和DeepRAG（阶段II）在所有测试场景中均表现出优于现有方法的性能。</figcaption>
+<p>DeepRAG在时间敏感和分布外（out-of-distribution）设置中展现出卓越的泛化能力与鲁棒性。在时间敏感数据集CAG上，与其他自适应检索方法和推理式检索方法相比，DeepRAG表现良好。值得注意的是，CoT-Retrieve在CAG上的表现优于DeepRAG。我们将此归因于时间敏感设置的核心挑战在于大多数情况下都需要触发检索。此外，即使在知识库中相关信息可能稀疏或缺失的场景下，DeepRAG在PopQA和WebQuestions上仍分别取得了2.63和4.57的显著F1分数提升。</p>
+<p>通过从自合成数据中学习，DeepRAG在有效探索知识边界的同时，将幻觉风险降至最低。TAARE的表现往往不及直接检索方法，这凸显了其内部知识与冗长内容之间的不匹配。此外，诸如CoT*和CoT-Retrieve*等激进的微调方法通过迫使模型学习超出其知识边界的知识，导致模型性能下降。DeepRAG通过利用自合成数据，在微调过程中谨慎地保留模型能力，在保持性能的同时有效防止了额外的幻觉。</p>
+<h2>5.1 Retrieval Efficiency</h2>
+<p>为了评估我们方法的效率，我们在 WebQuestions 数据集上比较平均检索次数，并报告每个查询的平均计算时间。计算时间在一台 H20*8 机器上测得。如表 2 所示，我们有以下观察：1)</p>
+<div class="tablewrap"><table><thead><tr><th>Method</th><th>EM</th><th>Avg. Retrievals.All</th><th>Avg. Retrievals.Correct</th><th>Avg. Retrievals.Incorrect</th><th>Time.</th></tr></thead><tbody>
+<tr><td>FLARE</td><td>28.8</td><td>0</td><td>0</td><td>0</td><td>2.58</td></tr>
+<tr><td>DRAGIN</td><td>21.2</td><td>0</td><td>0</td><td>0</td><td>1.36</td></tr>
+<tr><td>UAR</td><td>22.7</td><td>0.96</td><td>0.95</td><td>0.97</td><td>0.43</td></tr>
+<tr><td>TAARE</td><td>23.4</td><td>0.66</td><td>0.65</td><td>0.66</td><td>0.11</td></tr>
+<tr><td>IterDRAG</td><td>15.9</td><td>2.25</td><td>2.16</td><td>2.27</td><td>1.09</td></tr>
+<tr><td>Auto-RAG</td><td>17.4</td><td>4.52</td><td>3.03</td><td>2.35</td><td>0.71</td></tr>
+<tr><td>DeepRAG-Imi</td><td>30</td><td>0.43</td><td>0.13</td><td>0.56</td><td>0.67</td></tr>
+<tr><td>DeepRAG</td><td>32.7</td><td>0.28</td><td>0.12</td><td>0.36</td><td>0.5</td></tr>
+</tbody></table></div>
+<p>| Method      |   EM |   Avg. Retrievals.All |   Avg. Retrievals.Correct |   Avg. Retrievals.Incorrect |   Time. |</p>
+<figcaption>Table 2: 不同方法在WebQuestions上的检索频率分析。“Correct”表示模型给出正确答案的实例的平均检索次数，而“Incorrect”表示答案错误的实例的平均检索次数。Time指每条平均花费的秒数。</figcaption>
+<p>DeepRAG 能够以相对较低的检索成本实现更高的准确率，这归因于其对内部知识的动态使用。2) 基于置信度的方法在不同数据集上表现出有限的鲁棒性。例如，在 WebQuestions 数据集上，FLARE 和 DRAGIN 在默认置信度阈值下均未触发检索。3) 基于迭代检索的方法通常需要大量的检索操作。因此，像 DeepRAG 这样高效的自适应检索方法对于在保持性能的同时优化资源利用变得至关重要。</p>
+<h2>5.2 Relevance to Parametric Knowledge</h2>
+<p>在本节中，我们研究检索需求与内部知识之间的关系，以展示原子决策在探索知识边界方面的有效性。</p>
+<p>理想情况下，模型应当对超出其参数化知识（parametric knowledge）的查询发起检索，而对自身熟悉的查询则利用已有知识。我们使用思维链（CoT）的结果作为模型能否利用其参数化知识回答问题的指标。随后，我们分析其他自适应检索方法是否符合这种参数化知识利用模式。</p>
+<p>我们报告四项指标。F1 分数（F1 score）和准确率（Accuracy）作为基本性能度量，而平衡准确率（balanced accuracy）与马修斯相关系数（Matthews Correlation Coefficient, MCC）(contributors, 2025) 则被用于处理需要检索与无需检索两类情形之间的类别不平衡问题。</p>
+<p>如表 3 所示，我们发现：1) DeepRAG 在 F1、平衡准确率和 MCC 指标上均展现出更优的相关性表现。这表明 DeepRAG 通过探索知识边界成功识别了检索必要性；2) 尽管 FLARE、DRAGIN 和 TAARE 获得了较高的准确率分数，但其相对较低的平衡准确率和 MCC 分数表明，它们主要在需要检索的情形中取得成功，却难以正确避免不必要的检索。</p>
+<div class="tablewrap"><table><thead><tr><th>Method</th><th>F1</th><th>Acc</th><th>Balanced Acc</th><th>MCC</th></tr></thead><tbody>
+<tr><td>FLARE</td><td>0</td><td>0.718</td><td>0.5</td><td>0</td></tr>
+<tr><td>DRAGIN</td><td>0.007</td><td>0.709</td><td>0.495</td><td>-0.045</td></tr>
+<tr><td>UAR</td><td>0.481</td><td>0.756</td><td>0.648</td><td>0.341</td></tr>
+<tr><td>TAARE</td><td>0.127</td><td>0.712</td><td>0.518</td><td>0.078</td></tr>
+<tr><td>Iter-DRAG</td><td>0</td><td>0.718</td><td>0.5</td><td>0</td></tr>
+<tr><td>Auto-RAG</td><td>0</td><td>0.718</td><td>0.5</td><td>0</td></tr>
+<tr><td>DeepRAG-Imi</td><td>0.58</td><td>0.732</td><td>0.709</td><td>0.393</td></tr>
+<tr><td>DeepRAG</td><td>0.621</td><td>0.749</td><td>0.743</td><td>0.451</td></tr>
+</tbody></table></div>
+<p>| Method      |    F1 |   Acc |   Balanced Acc |    MCC |</p>
+<figcaption>Table 3: 不同自适应检索方法在2WikiMultihopQA上的内部知识利用分析。</figcaption>
+<figure><img src="assets/a159/figures/fig_3.png" alt="Figure 3: RL设置下在2WikiMultihopQA上的实验结果与检索效率。" loading="lazy"></figure>
+<figcaption>Figure 3: RL设置下在2WikiMultihopQA上的实验结果与检索效率。</figcaption>
+<h2>5.3 Effectiveness under RL Setting</h2>
+<p>Recently, reinforcement learning (RL) has demonstrated remarkable success in enhancing model capabilities across various domains (Liu et al., 2025; Wen et al., 2024; Guan et al., 2024b). Building upon this, we further explore the potential of DeepRAG by incorporating reinforcement learning. Specifically, we initialize from DeepRAG-Imi and optimize Stage II using the GRPO objective (Shao et al., 2024). The detailed implementation can be found in Appendix C.5, and our code is released in GitHub repository. 3</p>
+<p>Figure 3 presents the training dynamics of our RL-enhanced model. The results reveal an encouraging trend: as training progresses, the F1 score on 2WikiMultihopQA gradually improves while the average number of retrievals decreases. This demonstrates that our reward design effectively guides the model to achieve better performance with more efficient retrieval behavior.</p>
+<p>3 https://github.com/gxy-gxy/Search-R1-forDeepRAG/tree/main</p>
+<p>7</p>
+<figure><img src="assets/a159/figures/fig_4.png" alt="Figure 4: 检索策略的对比分析：仅参数化（parametric only）或仅检索（retrieve only）。" loading="lazy"></figure>
+<figcaption>Figure 4: 检索策略的对比分析：仅参数化（parametric only）或仅检索（retrieve only）。</figcaption>
+<figure><img src="assets/a159/figures/fig_5.png" alt="" loading="lazy"></figure>
+<figure><img src="assets/a159/figures/fig_6.png" alt="Figure 5: 模仿学习消融实验的平均分数与检索次数。" loading="lazy"></figure>
+<figcaption>Figure 5: 模仿学习消融实验的平均分数与检索次数。</figcaption>
+<h2>5.4 Question Decomposition Effectiveness</h2>
+<p>我们系统地分析了问题分解在检索叙事中的有效性。如图7所示，我们展示了不同问题的子查询数量与检索尝试次数的分布。大多数问题需要3-5步分解，而检索尝试主要集中在0-2轮之间。这表明DeepRAG能够有效分解问题，同时将冗余检索降至最低。</p>
+<p>此外，我们分析了子查询中WH词、名词、动词和连词的平均数量，如图8所示。DeepRAG分解出的原子查询包含更少的代词和连词，表明其查询分解策略简洁而有效。</p>
+<h2>5.5 Different Inference Strategy</h2>
+<p>为了深入洞察原子决策的有效性，我们在两种极端场景下评估了DeepRAG的性能：仅依赖内部知识（retrieve only）以及在每次子查询中都使用检索（parametric only）。如图4所示，parametric only策略表现较差，而retrieve only策略取得了相对较高的准确率，但产生了可观的检索成本。DeepRAG通过在内部与外部知识源之间进行自适应选择，取得了更优的性能。</p>
+<p>此外，DeepRAG优于retrieve only方法，因为在某些场景下，检索可能因长上下文或无关知识而损害模型性能。</p>
+<figure><img src="assets/a159/figures/fig_7.png" alt="Figure 6: 校准链消融实验的平均分数与检索次数。" loading="lazy"></figure>
+<figcaption>Figure 6: 校准链消融实验的平均分数与检索次数。</figcaption>
+<figure><img src="assets/a159/figures/fig_8.png" alt="Figure 8: 每个子查询中WH词、名词、动词和连词（and/or）的平均数量。" loading="lazy"></figure>
+<figcaption>Figure 8: 每个子查询中WH词、名词、动词和连词（and/or）的平均数量。</figcaption>
+<h2>5.6 Ablation Study</h2>
+<p>在本节中，我们进行了实验以验证 DeepRAG 数据构建与训练过程的有效性。</p>
+<p>对于模仿学习（Imitation Learning），我们将默认的选取最小检索成本路径的策略与两种替代方法进行对比：最大检索成本（most）和随机路径选择（random）。如图5所示，与 most 和 random 两种方法相比，DeepRAG-Imi 实现了更低的检索成本和更高的平均性能。</p>
+<p>对于校准链（Chain of Calibration），我们将默认的基于最优路径节点构建偏好的方法与两种替代方案进行对比：为所有节点构建偏好对，以及基于检索效率构建句子级偏序对。如图6所示，DeepRAG 在保持更高平均性能的同时实现了更低的检索成本。相比之下，句子级偏序对学习到了错误的偏好，导致对内部知识的过度依赖，进而造成检索成本低且性能差的结果。</p>
+<h2>6 Conclusion</h2>
+<p>在本文中，我们提出了 DeepRAG，将检索增强推理建模为马尔可夫决策过程（Markov Decision Process, MDP），通过将查询分解为子查询并按需检索，实现策略性与自适应的检索。具体而言，我们开发了一种二叉树搜索方法来合成用于模仿学习的数据，并进一步构建校准链（chain of calibration），以端到端的方式训练模型。在多种问答（QA）任务上的实验表明，DeepRAG 在提升检索效率的同时将答案准确率提高了 26.4%，证明了其在优化检索增强推理方面的有效性。</p>
+<p>8</p>
+<h2>Limitations</h2>
+<p>我们当前的 DeepRAG 框架存在若干局限性，我们计划在未来加以解决。首先，我们基于最终答案准确率（采用精确匹配（exact match）分数）来构建数据集。未来，我们将把工作扩展到更多领域，例如多轮对话，并采用更丰富的指标（如困惑度（perplexity））。其次，尽管我们的方法在多跳事实问答、时间敏感问答和异构知识库问答等任务上展现出较强的泛化能力，但它缺乏与知识图谱和工具等外部资源的集成。我们将把工作扩展到需要整合多种外部信息的领域，包括检索得到的数据、知识图谱数据和工具输出。</p>
+<h2>A.2 DeepRAG Construct Instruction</h2>
+<p>指令：你是一个乐于助人的检索增强生成（Retrieval-Augmented Generation，RAG）模型。你的任务是通过将问题逻辑地分解为清晰的子问题并逐一迭代处理来回答问题。</p>
+<p>使用 &quot;Follow up:&quot; 来引出每个子问题，并使用 &quot;Intermediate answer:&quot; 来提供答案。</p>
+<p>对于每个子问题，请判断你是可以直接给出答案，还是需要额外的信息。如果需要额外信息，请说明 &quot;Let&#x27;s search the question in Wikipedia.&quot;，然后利用检索到的信息进行全面回答。如果可以直接回答，则无需检索，立即给出答案。</p>
+<h2>B.1 Imitation Learning Objective</h2>
+<p>我们对检索到的文档实施掩码损失函数，以防止模型学习到可能对其性能产生负面影响的无关或噪声文本。通过这种方式，我们希望模型能够增强按需分解子查询并进行检索的能力。对于每个实例，损失函数的形式化定义如下：</p>
+<p>其中，若第 i 个推理步骤没有进行检索，则 d i 为 null；n 表示总迭代次数。</p>
+<h2>B.2 Chain of Calibration Objective</h2>
+<p>我们在合成的偏好数据上，使用校准链（Chain of Calibration）目标对大语言模型（LLM）进行微调。</p>
+<p>给定第 i 个子查询以及状态 s i = [ x , q 1 , r 1 , · · · , q i - 1 , r i - 1 ]，我们有两个不同的中间答案 r 1 i = a 1 i 和 r 2 i = ( d i , a 2 i )。基于上述过程，我们已经知道哪个 r i 是更受偏好的。因此，训练目标可以形式化表述如下：</p>
+<p>其中，σ 为 logistic 函数，超参数 β 调节因偏离基础参考模型 π ref 而施加的惩罚。y w 和 y l 分别指为直接答案和检索答案所生成的片段。具体而言，片段 &#x27;Intermediate Answer:&#x27; 对应直接答案，而片段 &#x27;Let&#x27;s search the question on Wikipedia&#x27; 对应基于检索的答案。</p>
+<h2>C Detailed Analysis</h2>
+<p>如图 9 所示，我们开展了一项案例研究，将 DeepRAG 与 Auto-RAG（Yu et al., 2024）进行比较，后者是一种密切相关的方法，其利用迭代检索来实现检索增强生成。对于每个子查询，Auto-RAG 都会检索相关文档并生成相应的子答案。这种方法不仅耗时，而且在未检索到任何相关文档时会失效。尽管 Auto-RAG 尝试利用其自身的相关文档来解决这一问题，但在大多数情况下它会陷入无限循环。相比之下，DeepRAG 迭代地生成子查询，并在每次迭代中判断是否使用内部知识。用于优化的二叉树搜索数据合成方法确保了可靠的子查询生成、中间答案和最终答案。即使检索到的文档中不存在相关信息，模型也会被引导基于内部知识给出最终答案。</p>
+<h2>C.1 Retrieval Efficiency</h2>
+<p>为了验证我们方法的效率，我们在 2WikiMultihopQA 和 WebQuestions 上比较了平均检索次数。如表 2 所示，我们有以下观察：</p>
+<p>1) 与其他自适应检索方法相比，DeepRAG 能够以相对较低的检索成本实现更高的准确率。这可以归因于我们对内部知识的动态使用。此外，当检索结果不充分时，DeepRAG 在探索相关证据方面表现出积极的趋势，这体现在 2WMQA（0.92 对比 1.25）和 WQ（0.12 对比 0.36）中较低的平均检索次数上。2) 基于置信度的方法在不同数据集上表现出有限的鲁棒性。例如，在使用相同阈值的情况下，FLARE 和 DRAGIN 两种方法均表现出不一致的行为：它们在 2WMQA 中每个查询大约触发一次检索，但在 WQ 中却完全无法达到检索阈值。这种不一致性凸显了基于置信度的方法在不同数据集上保持可靠性能的挑战。3) 基于迭代检索的方法通常需要大量的检索操作，导致高昂的计算成本。因此，像 DeepRAG 这样高效的自适应检索方法对于在保持性能的同时优化资源利用变得至关重要。</p>
+<p>12</p>
+<figure><img src="assets/a159/figures/fig_9.png" alt="Figure 9: 案例研究：Auto-RAG与DeepRAG对比。DeepRAG通过原子查询分解、忠实的中间答案以及自适应地利用内部知识取得成功。" loading="lazy"></figure>
+<figcaption>Figure 9: 案例研究：Auto-RAG与DeepRAG对比。DeepRAG通过原子查询分解、忠实的中间答案以及自适应地利用内部知识取得成功。</figcaption>
+<h2>C.2 Relevance to Parametric Knowledge</h2>
+<p>在本节中，我们研究检索需求与参数化知识之间的关系，以展示我们的方法在探索知识边界方面的有效性。</p>
+<p>理想情况下，模型应当对超出其参数化知识的查询发起检索，而对熟悉的查询则利用其已有知识。我们使用思维链（CoT）的结果作为模型能否利用其参数化知识回答问题的</p>
+<h2>C.3 Performance against Strong Baseline Models</h2>
+<p>我们将 DeepRAG 与近期的强推理模型进行比较：QwQ-32B-preview（Team, 2024）和 gpt-4o-turbo（OpenAI）。如表 4 所示，DeepRAG 在平均性能上优于 QwQ 和 gpt-4o，尤其是在时间敏感型问答（QA）任务中。虽然 DeepRAG 在某些情况下并未超越 gpt-4o，但其达到了相当的性能水平。这些结果表明，通过自适应地利用检索，DeepRAG 能够达到与强推理模型参数化知识相当的事实准确性水平。</p>
+<div class="tablewrap"><table><thead><tr><th>Models</th><th>ID</th><th>CAG</th><th>PopQA</th><th>WQ</th><th>Avg</th></tr></thead><tbody>
+<tr><td>QwQ-32B</td><td>31.43</td><td>3.43</td><td>10.6</td><td>15.1</td><td>18.4</td></tr>
+<tr><td>gpt-4o-turbo</td><td>60.6</td><td>23.36</td><td>43.5</td><td>25.35</td><td>42.68</td></tr>
+<tr><td>DeepRAG-qwen</td><td>43</td><td>51.09</td><td>40.6</td><td>24.2</td><td>40.38</td></tr>
+<tr><td>DeepRAG-llama</td><td>52.4</td><td>52.96</td><td>42.5</td><td>32.7</td><td>46.59</td></tr>
+</tbody></table></div>
+<p>| Models        |    ID |   CAG |   PopQA |    WQ |   Avg |</p>
+<figcaption>Table 4: 与强基线模型的性能对比。</figcaption>
+<h2>C.4 Ablation Study</h2>
+<p>在本节中，我们进行了实验以验证 DeepRAG 数据构建与训练过程的有效性。</p>
+<div class="tablewrap"><table><thead><tr><th>Method</th><th>ID F1</th><th>CAG EM</th><th>PopQA EM</th><th>WebQuestion EM</th><th>Avg</th></tr></thead><tbody>
+<tr><td>DeepRAG-Imi</td><td>49.46</td><td>50.47</td><td>43.6</td><td>30</td><td>44.6</td></tr>
+<tr><td>most</td><td>47.31</td><td>51.09</td><td>31.3</td><td>28</td><td>41.12</td></tr>
+<tr><td>random</td><td>44.76</td><td>51.4</td><td>34.8</td><td>27.1</td><td>40.56</td></tr>
+</tbody></table></div>
+<p>| Method      |   ID F1 |   CAG EM |   PopQA EM |   WebQuestion EM |   Avg |</p>
+<figcaption>Table 5: 模仿学习阶段消融实验的结果。ID指两个分布内数据集HotpotQA和2WikiMultihopQA的平均分数。</figcaption>
+<p>13</p>
+<div class="tablewrap"><table><thead><tr><th>Method</th><th>ID F1</th><th>CAG EM</th><th>PopQA EM</th><th>WebQuestion EM</th><th>Avg</th></tr></thead><tbody>
+<tr><td>DeepRAG</td><td>52.4</td><td>61.92</td><td>47.8</td><td>45.24</td><td>47.67</td></tr>
+<tr><td>all-node</td><td>50.92</td><td>50.47</td><td>41.5</td><td>32.7</td><td>45.3</td></tr>
+<tr><td>sentence-wise</td><td>30.16</td><td>12.46</td><td>20</td><td>12.9</td><td>21.14</td></tr>
+</tbody></table></div>
+<p>| Method        |   ID F1 |   CAG EM |   PopQA EM |   WebQuestion EM |   Avg |</p>
+<figcaption>Table 6: 校准链阶段消融实验的结果。</figcaption>
+<p>模仿学习（Imitation Learning） 我们将默认的选取检索代价最小路径的策略与两种替代方法进行比较：最大检索代价和随机路径选择。如表 5 所示，DeepRAG-Imi 使模型能够在模仿学习阶段学习知识边界。值得注意的是，CAG 在该阶段表现相对较差，这是由于其时间敏感性特性，需要持续检索最新信息。此外，如图 5 所示，与最大检索代价方法和随机选择方法相比，DeepRAG-Imi 实现了更低的检索代价和更高的平均性能。</p>
+<p>校准链（Chain of Calibration） 我们将默认的基于最优路径节点构建偏好的方法与两种替代方案进行比较：为所有节点构建配对，以及基于检索效率构建句子级偏序对。如表 6 所示，DeepRAG 相比这两种变体均展现出显著优势。具体而言，如图 6 所示，DeepRAG 在保持更高平均性能的同时实现了更低的检索代价。相比之下，句子级偏序对学习到了错误的偏好，导致对内部知识的过度依赖，进而造成检索代价低且性能差的结果。</p>
+<h2>C.5 Implementation Details under RL Setting</h2>
+<p>我们基于 Search-R1 代码库 4 进行实现。我们采用 GRPO，批大小（batch size）设为 32，并对每个提示（prompt）执行 8 次 rollout。为避免引入噪声，我们在训练过程中额外对检索到的文本进行掩码处理。</p>
+<p>R t =  0, answer ✗ and format ✗ 0.1, answer ✗ and format ✓ 1 - 0.1 × min(5, retrieve_time t ), answer ✓ 4 https://github.com/PeterGriffinJin/Search-R1</p>
+<div class="tablewrap"><table><thead><tr><th>Dataset</th><th>Method</th><th>EM</th><th>Avg. Retrievals.All</th><th>Avg. Retrievals.Correct</th><th>Avg. Retrievals.Incorrect</th></tr></thead><tbody>
+<tr><td></td><td>FLARE</td><td>30.3</td><td>0.99</td><td>1</td><td>0.99</td></tr>
+<tr><td></td><td>DRAGIN</td><td>29.1</td><td>1.03</td><td>1.03</td><td>1.03</td></tr>
+<tr><td></td><td>UAR</td><td>34.8</td><td>0.81</td><td>0.68</td><td>0.89</td></tr>
+<tr><td>2WMQA</td><td>TAARE</td><td>35.2</td><td>0.93</td><td>0.93</td><td>0.97</td></tr>
+<tr><td></td><td>IterDRAG</td><td>19.6</td><td>2.46</td><td>2.49</td><td>2.45</td></tr>
+<tr><td></td><td>Auto-RAG</td><td>23</td><td>6.26</td><td>4.13</td><td>1.81</td></tr>
+<tr><td></td><td>DeepRAG-Imi</td><td>47.2</td><td>1.13</td><td>0.95</td><td>1.28</td></tr>
+<tr><td></td><td>DeepRAG</td><td>48.1</td><td>1.09</td><td>0.92</td><td>1.25</td></tr>
+<tr><td></td><td>FLARE</td><td>28.8</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td></td><td>DRAGIN</td><td>21.2</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td></td><td>UAR</td><td>22.7</td><td>0.96</td><td>0.95</td><td>0.97</td></tr>
+<tr><td>WQ</td><td>TAARE</td><td>23.4</td><td>0.66</td><td>0.65</td><td>0.66</td></tr>
+<tr><td></td><td>IterDRAG</td><td>15.9</td><td>2.25</td><td>2.16</td><td>2.27</td></tr>
+<tr><td></td><td>Auto-RAG</td><td>17.4</td><td>4.52</td><td>3.03</td><td>2.35</td></tr>
+<tr><td></td><td>DeepRAG-Imi</td><td>30</td><td>0.43</td><td>0.13</td><td>0.56</td></tr>
+<tr><td></td><td>DeepRAG</td><td>32.7</td><td>0.28</td><td>0.12</td><td>0.36</td></tr>
+</tbody></table></div>
+<p>| Dataset   | Method      |   EM |   Avg. Retrievals.All |   Avg. Retrievals.Correct |   Avg. Retrievals.Incorrect |</p>
+<figcaption>Table 7: 不同自适应检索方法在2WikiMultihopQA(2WMQA)和WebQuestions(WQ)上的检索频率分析。“Correct”表示模型给出正确答案的实例的平均检索次数，而“Incorrect”表示答案错误的实例的平均检索次数。</figcaption>
+<h2>C.6 Retrieval Efficiency</h2>
+<p>为了验证本方法的效率，我们在 2WikiMultihopQA 和 WebQuestions 上比较了平均检索次数。如表 7 所示，我们有以下观察：1) DeepRAG 能够以相对较低的检索成本取得更高的准确率，这归因于其对内部知识的动态使用。2) 基于置信度的方法在不同数据集间表现出有限的鲁棒性。例如，在 WQ 上，FLARE 和 DRAGIN 在默认置信度阈值下均不会触发检索。3) 基于迭代检索的方法通常需要大量的检索操作。因此，像 DeepRAG 这样高效的自适应检索方法对于在保持性能的同时优化资源利用变得至关重要。</p>
+<p>14</p></div></div></body></html>

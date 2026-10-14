@@ -1,0 +1,451 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>通过提示让 GPT-3 更可靠（Prompting GPT-3 To Be Reliable）</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Prompting GPT-3 To Be Reliable</h1>
+<p class="lead">通过提示让 GPT-3 更可靠（Prompting GPT-3 To Be Reliable）</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">RAG与检索</span><span class="chip">思维链与推理</span><span class="chip">评测基准</span><span class="chip">可靠性与安全</span><span class="chip">人机协作</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a488.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>该论文系统研究如何仅靠提示策略提升 GPT-3 的可靠性，将可靠性分解为泛化性、社会偏见、校准与事实性四个维度，并逐一给出可操作的提示方案。方法上包括：控制 prompt 中示例的选择、分布与排序，追加自然语言干预指令，用 LM 概率或 self-consistency 频率作为自由生成答案的置信度，以及在 prompt 中注入检索段落、反事实知识与人工分解的子问题。关键结论是：合适的提示能让 GPT-3 在四个维度上全面超过小规模监督模型；示例的答案分布会直接塑造模型偏见，平衡采样加随机打乱最有效；置信度可支撑“高置信自动通过、低置信人工复核”的选择性预测；面对与记忆冲突的 prompt 内容，GPT-3 约 85% 的情况会采用新答案。对团队而言，这是一份关于“如何可靠使用 LLM”的系统性实证手册，其提示设计原则与可靠性评测框架对日常研发提效流程有直接参考价值。</p>
+<h2>问题</h2><p>GPT-3 等 LLM 通过 few-shot prompting 被广泛用于真实语言应用，但其在分布偏移下的泛化、社会偏见、置信度校准与事实性等可靠性问题研究不足；已有工作多只评测单一维度或模型内在特性。论文要系统回答：哪些简单有效的提示策略能提升 GPT-3 在这四个可靠性维度上的表现，帮助从业者更可靠地使用 LLM。</p>
+<h2>方法</h2><p>将可靠性分解为四个维度并逐一设计提示策略做系统实证：(1) 泛化性——用源域随机采样的 demo 构成固定 prompt，在 domain shift（MRQA）、对抗扰动（AdvGLUE/Contrast Sets）与伪相关（HANS/PAWS）上对比监督模型；(2) 社会偏见——控制 demo 的人口学答案分布（平衡采样 Pro/Anti-Bias 与 ambiguous/disambiguated 示例）、随机打乱示例顺序、在测试问题前追加自然语言公平性指令；(3) 校准——用归一化 LM 概率（LM-Prob）与 self-consistency 采样频率（Self-Con，温度 0.7 采样 10 次）作为自由生成答案的置信度，做选择性预测；(4) 事实性——用反事实三元组〈P&#x27;, Q, A&#x27;〉做 in-context 知识更新，用 Contriever 检索 Wikipedia 段落前置到测试问题构建检索增强 prompt，并在 HotpotQA 上把人工书写的问题分解子问题及首步 QA 对加入 prompt 以纠正推理链。</p>
+<h2>关键结果</h2><p> MRQA 六个 OOD 目标域上，用源域 demo 与目标域 demo 的 prompt 取得相同 F1（77.2），且 GPT-3 few-shot 在 OOD/挑战测试集上的性能差距远小于监督 RoBERTa (123M)，并在所有对比的监督基线中泛化最好</p><p> NQ 上 GPT-3 与 DPR-BERT 平均准确率相近，但 GPT-3 置信度最高的 10% 预测准确率达 83.1%，DPR-BERT 仅 60.1%</p><p> 2-shot 准确率比 64-shot 低 5.8 分但校准更好；增加 demo 数量提升准确率但不提升校准</p><p> 在反事实三元组 prompt 下，GPT-3 约 85% 的情况会用新知识更新记忆答案，远高于监督基线；更大模型（Text-Davinci-001 对比 Text-Curie-001）更新更好</p><p> 检索段落加入 prompt 在三个开放域 QA 数据集上一致提升准确率，SQuAD 提升最大，且检索 recall 越高性能越好</p><p> HotpotQA 上加入人工分解的首步子问题及首步 QA 对后，多跳问答与子问题准确率均显著提升</p><p> 定向知识更新：混合原始、编辑相关、编辑无关三类示例时，FEVER 与 zsRE 的编辑成功率达 99.9% 与 98.8%，无关问题准确率损失仅 0.5%</p><p> BBQ 上平衡 prompt 在保持低偏见分的同时提升准确率；追加自然语言公平性指令后模型更多选择中性答案，显著降低偏见分</p>
+<h2>创新点</h2><p>与以往只评测模型内在特性或单一可靠性维度的工作不同，本文是对四个核心可靠性维度的元分析式系统研究，且聚焦“寻找有效的提示策略”而非仅做评估。校准方面聚焦免微调、免事后校准的自由文本生成置信度估计（LM 概率与 self-consistency 频率）；知识更新方面不修改模型参数、不依赖内部权重访问，仅通过在 prompt 中追加反事实/检索内容实现 in-context 知识更新与推理链纠正，适用于 GPT-3 这类黑盒 API 模型。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.2 提示工程 | 3.5 评测与可靠使用</p><p><b>理由：</b>论文直接命中团队三个能力域：3.2 提示工程（demo 示例的选择/分布/排序、自然语言干预指令、CoT 与问题分解提示）；3.1 上下文工程与记忆（检索增强 prompt、in-context 知识更新、上下文内容组织对模型行为的决定性影响）；3.5 评测与可靠使用（四维可靠性评测框架、校准与选择性预测、高置信自动通过+低置信人工复核的人机协作流程）。它是“把模型用好而非训练模型”的典型实证研究，结论可直接转化为团队的提示设计规范与可靠性保障手段。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2210.09150v2  [cs.CL]  2023年2月15日</p>
+<h2>PROMPTING GPT-3 TO BE RELIABLE</h2>
+<p>通过提示使 GPT-3 变得可靠</p>
+<p>Chenglei Si 1 ∗ , Zhe Gan 2 , Zhengyuan Yang 2 , Shuohang Wang 2</p>
+<p>2 1 2</p>
+<p>Jianfeng Wang , Jordan Boyd-Graber , Lijuan Wang</p>
+<p>1 马里兰大学 2 微软</p>
+<p>clsi@umd.edu pkuganzhe@gmail.com lijuanw@microsoft.com</p>
+<h2>ABSTRACT</h2>
+<p>大语言模型（Large Language Models, LLMs）通过少样本提示（few-shot prompting）展现出了令人印象深刻的能力。诸如 OpenAI GPT-3 之类的商业化 API 进一步推动了它们在现实世界语言应用中的使用。然而，如何提升 GPT-3 可靠性这一关键问题仍未得到充分探索。尽管可靠性是一个宽泛且定义模糊的术语，我们将其分解为四个主要方面，这些方面与现有的机器学习（ML）安全框架相对应，并被公认为十分重要：泛化能力、社会偏见、校准和事实性。我们的核心贡献是建立简单而有效的提示来提升 GPT-3 的可靠性，使其能够：1）在分布外（out-of-distribution）进行泛化；2）平衡人口统计分布并使用自然语言指令来减少社会偏见；3）校准输出概率；以及 4）更新 LLM 的事实知识和推理链。通过适当的提示，GPT-3 在所有这些方面都比较小规模的有监督模型更加可靠。我们发布了所有经过处理的数据集、评估脚本和模型预测。1 我们的系统性实证研究不仅为提示 LLM 的可靠性带来了新的见解，更重要的是，我们的提示策略可以帮助从业者更可靠地使用诸如 GPT-3 之类的 LLM。</p>
+<h2>1 INTRODUCTION</h2>
+<p>自然语言处理（NLP）领域目前由大语言模型（LLMs）主导——这类模型在大规模无标注文本数据上进行预训练，随后被用于下游任务（Devlin et al., 2019a; Brown et al., 2020）。扩大模型和数据规模通常能在下游任务上带来收益（Kaplan et al., 2020; BIG-Bench, 2022），并产生一些人所谓的涌现能力（emergent abilities）（Wei et al., 2022a）。这些涌现行为是通过提示（prompting）实现的——提示是一种精心构造的自然语言文本，用于在不依赖昂贵有监督数据的情况下塑造预测或提供相关信息。在所有现有的 LLM 中，GPT-3（Brown et al., 2020）因其灵活性以及通过 OpenAI API 使用的便捷性而尤为流行 2。</p>
+<p>现有的实证研究针对特定任务考察 GPT-3，例如数学推理（Hendrycks et al., 2021a）、多跳推理（Wei et al., 2022b; Kojima et al., 2022）和代码生成（Chen et al., 2021a）。然而，这些评估中不断攀升的数字并不能确保 LLM 的可靠性。例如，LLM（包括 GPT-3）会产生带有偏见的生成内容（Lucy &amp; Bamman, 2021）、虚假陈述（Lin et al., 2022b）以及过时的信息（Chen et al., 2021b; Kasai et al., 2022）。将此类模型部署到现实世界中可能造成灾难性的危害。</p>
+<p>在提示 LLM 的背景下，此前已有若干工作探讨了其可靠性。例如，在 GPT-3（Brown et al., 2020）、OPT（Zhang et al., 2022）、Gopher（Rae et al., 2021）和 PaLM（Chowdhery et al., 2022）的发布报告中，都有专门的实验来评估这些 LLM 的表征偏见和毒性。另一类工作则评估了基于提示的 LLM 在数学题或选择题上的校准（calibration）情况（Lin et al., 2022a; Kadavath et al., 2022）。我们在两个关键方面与这些先前的工作有所不同：( i ) 我们对可靠性的四个核心方面进行了更为全面的研究，起到了元分析（meta-analysis）的作用。( ii ) 我们特别着重于寻找在这些可靠性方面行之有效的提示策略，而不仅仅是评估模型的内在特性（图 1）。</p>
+<p>∗ 本工作完成于微软实习期间。</p>
+<p>1 https://github.com/NoviScl/GPT3-Reliability</p>
+<p>2 除非另有说明，我们在实验中默认使用 CODE-DAVINCI-002 模型（也称为 Codex 或 GPT 3.5），因为我们的初步结果表明，该模型是我们尝试过的大多数 NLP 数据集上最准确的模型。</p>
+<p>1</p>
+<figure><img src="assets/a488/figures/fig_1.png" alt="Figure 1: Four main reliability factors we examined and the core findings." loading="lazy"></figure>
+<figcaption>Figure 1: Four main reliability factors we examined and the core findings.</figcaption>
+<p>我们的可靠性测试框架借鉴了关于机器学习（ML）安全领域未解决问题的综述（Hendrycks et al., 2021b）：抵御危害（泛化性）、识别危害（校准）、引导 ML 系统以及降低部署危害（减少社会偏见和提高事实性）。这些方面还旨在应对现有概念框架中所识别出的 ML 系统风险（Tan et al., 2022; 2021）。我们在附录 A 节中对相关工作进行了更为详尽的讨论。</p>
+<p>如图 1 所总结的，我们简单的提示策略在我们考虑的所有可靠性指标上都优于较小规模的有监督模型：1）使用从源域随机采样的示例进行提示，使 GPT-3 能够在未见过的域和具有挑战性的示例上稳健地泛化；2）从平衡的人口统计分布中采样的示例以及自然语言干预可以减少社会偏见；3）语言模型概率经过校准以反映准确率；以及 4）附加最新知识可以取代 GPT-3 所记忆的知识或推理链。</p>
+<h2>2 FACET 1: GENERALIZABILITY</h2>
+<p>大语言模型（LLM）常被批评只见树木、不见森林。它们会过拟合来自特定领域的训练数据（领域偏移），对文本中的微小变化（扰动）不够稳健，或者借助捷径进行预测（虚假相关性）。这些病态使模型变得不可靠，因为这类分布偏移在真实世界数据中无时无刻不在发生，并可能造成显著的性能下降。在本节中，我们研究当测试数据与提示中的示例来自不同分布时，GPT-3 能否保持稳健，以及它们的泛化能力与有监督模型相比表现如何。</p>
+<p>实验设置 我们研究上述所有三种类型的分布偏移。针对其中每一种，研究人员都创建了针对现代语言模型弱点的数据集，我们采用这些数据集进行评估。对于领域偏移，MRQA (Fisch et al., 2019) 在六个来自源域的机器阅读数据集上训练，并在六个不同的目标域上测试；对于扰动，AdvGLUE (Wang et al., 2021) 基于自动对抗扰动和人工过滤构建了 GLUE (Wang et al., 2018) 的对抗版本，而 Contrast Sets (Gardner et al., 2020) 则是由专家编写的、会改变标签的最小编辑；对于虚假相关性，HANS (McCoy et al., 2019) 和 PAWS (Zhang et al., 2019) 是为在 MNLI 和 QQP 上训练的模型设计的挑战集，训练数据中的词汇重叠特征在测试时不再成立。对于上述每种设置，我们通过从源域采样示例来评估一种简单的提示策略（对于 MRQA，我们在所有目标数据集上使用由从源域随机采样的八个示例组成的固定提示；对于扰动和虚假相关性，我们分别从 GLUE、MNLI 和 QQP 的原始干净训练数据中随机采样 16 个示例）。此外，对于领域偏移，我们还考虑了一种从每个目标域的训练集中采样八个示例的提示，以消融示例分布所带来的影响。</p>
+<p>2</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>MRQA.Source ↑</th><th>MRQA.Target ↑</th><th>MRQA.Gap ↓</th><th>AdvGLUE.Original ↑</th><th>AdvGLUE.Perturbed ↑</th><th>AdvGLUE.Gap ↓</th><th>Contrast Set.Original ↑</th><th>Contrast Set.Perturbed ↑</th><th>Contrast Set.Gap ↓</th></tr></thead><tbody>
+<tr><td>RoBERTa</td><td>81.6</td><td>62.1</td><td>19.5</td><td>91.7</td><td>51.7</td><td>40</td><td>86.1</td><td>71.1</td><td>15</td></tr>
+<tr><td>GPT-3</td><td>79.8</td><td>77.2 (S) / 77.2 (T)</td><td>2.6</td><td>84.2</td><td>69.3</td><td>14.9</td><td>85.5</td><td>80</td><td>5.5</td></tr>
+</tbody></table></div>
+<p>|         |   MRQA.Source ↑ | MRQA.Target ↑       |   MRQA.Gap ↓ |   AdvGLUE.Original ↑ |   AdvGLUE.Perturbed ↑ |   AdvGLUE.Gap ↓ |   Contrast Set.Original ↑ |   Contrast Set.Perturbed ↑ |   Contrast Set.Gap ↓ |</p>
+<figcaption>Table 1: For GPT-3 on MRQA target domain test sets, we report results for using both demos from the source (S) and target (T) domains, which surprisingly achieve the same F1 on the target domains (77.2). For AdvGLUE and Contrast Set, we use accuracy as the metric and we use demos from the clean data as the prompt. In all cases, GPT-3 few-shot prompting incurs much smaller performance gaps on the OOD or challenge test sets than the supervised RoBERTa (123M) baseline. We include the comparison with many other supervised baselines in Appendix B and GPT-3 exhibits better generalization than all of them.</figcaption>
+<p>结果 表 1 和表 2 比较了在源域数据集或干净训练数据上训练的有监督 RoBERTa（Liu et al., 2019）和 BERT（Devlin et al., 2019b）模型，以及使用从与有监督模型相同的训练数据中采样示例的 GPT-3。3 即使 GPT-3 在域内测试集上的表现略逊于有监督基线，它在分布外（OOD）测试上仍取得了更高的准确率，从而带来更小的泛化差距。这表明，对 GPT-3 进行提示可以比小规模语言模型的有监督微调更加稳健。令人惊讶的是，我们在 MRQA 上比较了使用从源域采样的演示示例与从目标域采样的演示示例，两种提示方法给出了相同的 OOD 泛化结果，这表明 GPT-3 提示可以直接泛化到测试示例分布不同于提示演示分布的 OOD 测试集，这可能是因为演示示例的作用更多在于指定任务，而非提供输入分布的信息（Min et al., 2022）。</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>BERT (340M).→.MNLI</th><th>RoBERTa.(354M).HANS</th><th>GPT-3..</th></tr></thead><tbody>
+<tr><td>MNLI ↑</td><td>86.2</td><td>89.1</td><td>77.6</td></tr>
+<tr><td>HANS ↑</td><td>71.4</td><td>77.1</td><td>75.3</td></tr>
+<tr><td>Gap ↓</td><td>14.8</td><td>12.0</td><td>2.3</td></tr>
+<tr><td></td><td>QQP →</td><td>PAWS</td><td></td></tr>
+<tr><td>QQP ↑</td><td>91.3</td><td>89.0</td><td>83.5</td></tr>
+<tr><td>PAWS ↑</td><td>40.1</td><td>39.5</td><td>73.7</td></tr>
+<tr><td>Gap ↓</td><td>51.2</td><td>49.5</td><td>9.8</td></tr>
+</tbody></table></div>
+<p>|        | BERT (340M).→.MNLI   | RoBERTa.(354M).HANS   |   GPT-3.. |</p>
+<figcaption>Table 2: When using demos sampled from MNLI and QQP, GPT-3 few-shot prompting achieves much better generalization than smaller supervised models (BERT and RoBERTa) on the OOD test sets HANS and PAWS.</figcaption>
+<p>要点（i）在所有三种设置（域偏移、扰动、伪相关）下，GPT-3 的少样本提示都比微调后的 BERT 和 RoBERTa 等有监督模型更加稳健。（ii）使用从源数据集中随机采样的演示示例是一个简单但强大的基线；事实上，其表现与使用从目标分布中采样的演示示例相同。</p>
+<h2>3 FACET 2: SOCIAL BIAS AND FAIRNESS</h2>
+<p>除了在域内和 OOD 数据集上取得高性能之外，可靠性的第二个关键方面是我们期望模型对不同的人口群体保持公平。存在偏差的模型在部署到实际应用中时会造成严重危害，尤其是对受到歧视的少数群体（Cao et al., 2022）。在本节中，我们考察 GPT-3 在两个下游任务——指代消解和问答——中是否会产生有偏差的预测。</p>
+<p>3 对于 Contrast Set，我们在正文中展示了 BoolQ 子集上的结果，并在表 14 中给出了其他子集的结果，其结论相同，即 GPT-3 比有监督模型更加稳健。</p>
+<p>3</p>
+<div class="tablewrap"><table><thead><tr><th>Prompt</th><th>Type I Pro ↑</th><th>Type I Anti ↑</th><th>Gap</th><th>↓</th><th></th><th>Type II Pro ↑</th><th>Type II Anti ↑</th><th>Gap</th><th>↓</th><th></th></tr></thead><tbody>
+<tr><td>Supervised Baseline</td><td>Supervised Baseline</td><td>Supervised Baseline</td><td>Supervised Baseline</td><td>Supervised Baseline</td><td>Supervised Baseline</td><td>Supervised Baseline</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>E2E (Lee et al., 2017)</td><td>74.9</td><td>47.4</td><td>27.2</td><td>88.6</td><td>77.3</td><td>11.3</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>GPT-3 Few-Shot: Bias Distribution in the Prompt (16 shots)</td><td>GPT-3 Few-Shot: Bias Distribution in the Prompt (16 shots)</td><td>GPT-3 Few-Shot: Bias Distribution in the Prompt (16 shots)</td><td>GPT-3 Few-Shot: Bias Distribution in the Prompt (16 shots)</td><td>GPT-3 Few-Shot: Bias Distribution in the Prompt (16 shots)</td><td>GPT-3 Few-Shot: Bias Distribution in the Prompt (16 shots)</td><td>GPT-3 Few-Shot: Bias Distribution in the Prompt (16 shots)</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Balanced</td><td>89.2</td><td>81.1</td><td>8.1</td><td>99.2</td><td>95.5</td><td>3.7</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Type I - Pro</td><td>93.4</td><td>42.4</td><td>51.0</td><td>91.1</td><td>78.9</td><td>12.2</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Type II - Pro</td><td>87.6</td><td>59.5</td><td>28.1</td><td>100.0</td><td>98.7</td><td>1.3</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Type I - Anti</td><td>50.8</td><td>80.8</td><td>-30.0</td><td>57.4</td><td>51.1</td><td>6.3</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Type II - Anti</td><td>85.5</td><td>68.2</td><td>17.3</td><td>100.0</td><td>99.5</td><td>0.5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>GPT-3 Few-Shot: Prompt Ordering (16 shots, Balanced)</td><td>GPT-3 Few-Shot: Prompt Ordering (16 shots, Balanced)</td><td>GPT-3 Few-Shot: Prompt Ordering (16 shots, Balanced)</td><td>GPT-3 Few-Shot: Prompt Ordering (16 shots, Balanced)</td><td>GPT-3 Few-Shot: Prompt Ordering (16 shots, Balanced)</td><td>GPT-3 Few-Shot: Prompt Ordering (16 shots, Balanced)</td><td>GPT-3 Few-Shot: Prompt Ordering (16 shots, Balanced)</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Randomly Shuffled</td><td>89.2</td><td>81.1</td><td>8.1</td><td>99.2</td><td>95.5</td><td>3.7</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Pro in the end</td><td>89.5</td><td>76.3</td><td>13.2</td><td>93.7</td><td>81.8</td><td>11.9</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Anti in the end</td><td>94.2</td><td>73.2</td><td>21.0</td><td>95.5</td><td>87.1</td><td>8.4</td><td></td><td></td><td></td><td></td></tr>
+</tbody></table></div>
+<p>| Prompt                                                     | Type I Pro ↑                                               | Type I Anti ↑                                              | Gap |↓|                                                    | Type II Pro ↑                                              | Type II Anti ↑                                             | Gap |↓|                                                    |</p>
+<figcaption>Table 3: GPT-3 results on WinoBias. The bias gap between Pro-Bias subsets and Anti-Bias subsets indicates the extent of gender biases exhibited by the model (smaller-scale gap is better). Results of the baseline ECE model (Lee et al., 2017) are taken from the WinoBias paper (Zhao et al., 2018). Prompt with balanced pro-bias and anti-bias answers best shrinks the bias gap, and randomly shuffling the demos is better than putting one group at the end.</figcaption>
+<h2>3.1 THE CASE OF GENDER BIAS: WINOBIAS</h2>
+<p>数据集 我们从 WinoBias 数据集（Zhao et al., 2018）入手，该数据集使用模板来检验模型是否更倾向于将性别代词分配给符合刻板印象的职业。WinoBias 包含两类示例：类型 I（Type I）是模糊且具有挑战性、需要世界知识的示例；类型 II（Type II）则仅凭句法信息即可解决。对于每种类型，示例要么印证（pro-bias，亲偏差）社会偏见，要么挑战（anti-bias，反偏差）社会偏见。理想情况下，指代消解准确率在亲偏差与反偏差子集上应当相近（差距较小）。</p>
+<p>提示设计 为便于评估，我们将 WinoBias 数据集重新格式化为问答格式：给出原句，然后添加问题&quot;What does the pronoun refer to in the above sentence?&quot;（其中&quot;the pronoun&quot;会被替换为句子中实际出现的代词），并采用答案精确匹配（exact match）作为评估指标。我们从训练集中随机采样示例作为提示，然后在 Pro 和 Anti 测试集上进行评估。</p>
+<p>提示中应包含哪些示例 我们比较了：1) 从 Type I-Pro、Type I-Anti、Type II-Pro 和 Type II-Anti 四个子集中各采样四个演示示例（Balanced，均衡），共计 16 个演示示例；2) 从单个子集中采样 16 个演示示例。均衡提示产生的预测偏差最小（表 3，第二个区块）。特别地，如果只保留亲偏差（Pro-Bias）示例，模型将偏向给出亲偏差预测（在 Type I 测试示例上尤为明显，因为它们更加模糊，而 Type II 示例具有明确的句法线索）。</p>
+<p>示例应如何排序 我们比较了：1) 随机打乱演示示例的顺序；2) 将所有亲偏差或反偏差示例置于提示末尾。随机打乱最能缩小偏差差距（表 3，第三个区块）。有趣的是，无论将亲偏差还是反偏差示例置于末尾，都会增大偏差差距。</p>
+<h2>3.2 BROADER SOCIAL DIMENSIONS: BBQ</h2>
+<p>数据集 我们现在使用 BBQ（Parrish et al., 2022）来探索更多的社会维度，该基准测试用于检验针对九个受保护群体（年龄、残疾状况、性别认同、国籍、外貌、种族、宗教、社会经济地位、性取向）人群的社会偏见。BBQ 的示例以四个多项选择题为一组。其中两个问题是模糊的——上下文缺乏能够指向某个答案的证据。每组中的另外两个问题的上下文则指向一个明确的答案：模型应当选择正确答案而不是弃答。每个问题有三个选项：支持刻板印象的亲偏差（Pro-Bias）答案、反驳刻板印象的反偏差（Anti-Bias）答案，以及一个中性答案（例如“无法确定。”）。在报告结果时，我们报告：1) 在模糊问题和明确问题上的准确率（越高越好）；2) 在模糊问题和已消歧问题上的偏差分数（数值越小越好）。直观地说，偏差分数衡量的是模型在做出非“未知”预测时给出亲偏差答案的频率，其中 0% 表示没有偏差，100% 表示总是遵循偏差。</p>
+<p>4</p>
+<div class="tablewrap"><table><thead><tr><th>Prompt</th><th>Ambig Acc ↑</th><th>DisAmbig Acc ↑</th><th>Ambig Bias Score</th><th>↓</th><th></th><th>DisAmbig Bias Score</th><th>↓</th><th></th></tr></thead><tbody>
+<tr><td>Supervised Baselines</td><td>Supervised Baselines</td><td>Supervised Baselines</td><td>Supervised Baselines</td><td>Supervised Baselines</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>RoBERTa-Base (123M)</td><td>61.2</td><td>52.7</td><td>4.9</td><td>4.7</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>RoBERTa-Large (354M)</td><td>49.4</td><td>87.3</td><td>10.4</td><td>1.2</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>DeBERTa-Base (184M)</td><td>47.6</td><td>90.4</td><td>12.8</td><td>2.9</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>DeBERTa-Large (435M)</td><td>30.1</td><td>95.5</td><td>24.7</td><td>-1.0</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>GPT-3 Few-Shot Prompting</td><td>GPT-3 Few-Shot Prompting</td><td>GPT-3 Few-Shot Prompting</td><td>GPT-3 Few-Shot Prompting</td><td>GPT-3 Few-Shot Prompting</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>0-shot</td><td>60.5</td><td>43.2</td><td>3.7</td><td>4.4</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>BBQ Balanced</td><td>96.8</td><td>76.0</td><td>2.4</td><td>1.5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>BBQ Ambig-Neutral</td><td>99.9</td><td>13.2</td><td>0.0</td><td>-3.5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>BBQ Ambig-Pro-Bias</td><td>2.6</td><td>97.3</td><td>24.7</td><td>3.2</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>BBQ Ambig-Anti-Bias</td><td>2.5</td><td>97.0</td><td>23.6</td><td>3.1</td><td></td><td></td><td></td><td></td></tr>
+</tbody></table></div>
+<p>| Prompt                   | Ambig Acc ↑              | DisAmbig Acc ↑           | Ambig Bias Score |↓|     | DisAmbig Bias Score |↓|   |</p>
+<figcaption>Table 4: Results on the BBQ dataset. For GPT-3 prompting, apart from the zero-shot result, others use 8-shots. For accuracy (Acc), higher value is better; for bias score, lower magnitude is better. The balanced prompt best trades-off accuracy and bias for GPT-3.</figcaption>
+<div class="tablewrap"><table><thead><tr><th>Prompt</th><th>Ambig Acc ↑</th><th>DisAmbig Acc ↑</th><th>Ambig Bias Score ↓</th><th>DisAmbig Bias Score ↓</th></tr></thead><tbody>
+<tr><td>Before Intervention</td><td>2.6</td><td>97.3</td><td>24.7</td><td>3.2</td></tr>
+<tr><td>After Intervention</td><td>96.6</td><td>51.5</td><td>1.9</td><td>3.8</td></tr>
+</tbody></table></div>
+<p>| Prompt              |   Ambig Acc ↑ |   DisAmbig Acc ↑ |   Ambig Bias Score ↓ |   DisAmbig Bias Score ↓ |</p>
+<figcaption>Table 5: The impact of adding natural language intervention to a biased prompt on GPT-3. Adding an instruction leads the model to make more neutral predictions and reduce bias scores.</figcaption>
+<p>答案分布影响偏差 我们采样了相同数量的演示示例，但采用不同的答案分布（表 4）。在零样本（zero-shot）推理下，GPT-3 的低偏差被低准确率所抵消。一种平衡的提示——即同时采样带有亲偏差和反偏差答案的模糊问题与已消歧问题——能够在保持低偏差分数的同时提高准确率。接下来，当我们在提示中只呈现带有中性答案的模糊问题时，GPT-3 能够轻易学会这种模式，从而总是预测中性答案，这使得偏差分数极低且在模糊问题上的准确率很高，但牺牲了在已消歧问题上的准确率。最后，我们实验了使用有偏提示的情况，即只在提示中采样模糊问题，并将其答案全部设置为支持偏差或反对偏差。如表 4 最后两行所示，这两种情况都会导致模型产生偏差，在模糊问题上获得很高的偏差分数。这表明，当演示示例偏向某些人口群体时，GPT-3 会习得这些偏差，因此在下游应用中应当优先使用平衡的提示。</p>
+<p>自然语言干预可缓解偏差 最后，我们探索了使用自然语言指令引导 GPT-3 的预测以实现更好公平性的可能性。我们使用 Ambig-Pro-Bias 提示，并在每个测试问题前附加以下额外指令：“我们应当平等对待来自不同社会经济地位、性取向、宗教、种族、外貌、国籍、性别认同、残障状况和年龄的人群。当我们没有足够的信息时，应当选择未知选项，而不是基于我们的刻板印象做出假设。”如表 5 所示，加入这一干预后，GPT-3 更倾向于选择中性答案，从而在模糊问题上获得更高的准确率，同时显著降低了偏差分数。这表明 GPT-3 对此类自然语言干预是敏感的。这与 RoBERTa (Zhao et al., 2021a) 等更小的语言模型形成对比，后者更为僵化。这一发现为有效减少社会偏差提供了一种新途径。</p>
+<p>5</p>
+<p>要点 (i) 答案的人口统计分布对模型偏差有巨大影响，采样平衡的提示最能减少偏差。(ii) 随机打乱演示示例比将所有亲偏差或反偏差示例置于末尾能带来更小的偏差。(iii) 通过提示中的指令指定期望的模型行为（例如保持公平）能够有效引导模型预测。</p>
+<h2>4 FACET 3: UNCERTAINTY CALIBRATION</h2>
+<p>没有任何语言模型能够做到完美，为了安全地使用这些不完美的模型，用户必须决定何时信任模型的预测，以避免误信错误的预测，尤其是在高风险场景中。这就需要可靠性的另一个方面——不确定性校准（uncertainty calibration）：为每个模型预测提供置信度分数，该分数能够准确反映预测答案正确的可能性。</p>
+<h2>4.1 EVALUATION SETUP</h2>
+<p>实验设置 我们研究自由格式答案生成的场景：给定一个测试问题，我们提示模型生成一个答案字符串并获取其置信度分数（下文详述），并基于与标准答案的精确匹配来评估所生成答案的正确性。我们在三个问答（QA）数据集上进行实验：NQ、TriviaQA 和 HotpotQA。在所有情况下，我们均采用闭卷设置（即不提供额外的证据段落）。我们关注内在校准结果：使用原始置信度分数，而非事后校准（post-hoc calibration），后者需要一个额外的开发集来进行参数调优。我们报告标准校准指标——期望校准误差（ECE）、可靠性图 4，以及选择性预测结果：我们将所有预测按其置信度排序，观察置信度最高的预测的准确率是否显著高于平均准确率。由于 ECE 因其分桶机制而存在已知缺陷（Si et al., 2022），我们还报告了 Brier 分数（Brier, 1950）。我们的基线是有监督问答模型 DPR-BERT（Si et al., 2022），其使用稠密段落检索器（DPR; Karpukhin et al., 2020）将排名靠前的段落输入 BERT 阅读器模型以抽取答案。我们遵循其联合校准设置来为 DPR-BERT 的预测打分。</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>Acc ↑</th><th>ECE ↓</th><th>Brier ↓</th></tr></thead><tbody>
+<tr><td>NQ</td><td>NQ</td><td>NQ</td><td>NQ</td></tr>
+<tr><td>DPR-BERT (110M)</td><td>36.1</td><td>29.4</td><td>33.5</td></tr>
+<tr><td>GPT-3 LM Prob</td><td>40.5</td><td>18.9</td><td>23.3</td></tr>
+<tr><td>GPT-3 Self-Con</td><td>40.2</td><td>14.3</td><td>20.1</td></tr>
+<tr><td>TriviaQA (TQA)</td><td>TriviaQA (TQA)</td><td>TriviaQA (TQA)</td><td>TriviaQA (TQA)</td></tr>
+<tr><td>GPT-3 LM Prob</td><td>73.8</td><td>3.8</td><td>15.9</td></tr>
+<tr><td>GPT-3 Self-Con</td><td>73.2</td><td>11.9</td><td>16.5</td></tr>
+<tr><td>HotpotQA (HQA)</td><td>HotpotQA (HQA)</td><td>HotpotQA (HQA)</td><td>HotpotQA (HQA)</td></tr>
+<tr><td>GPT-3 LM Prob</td><td>29.8</td><td>25.0</td><td>23.5</td></tr>
+<tr><td>GPT-3 Self-Con</td><td>28.5</td><td>20.7</td><td>19.9</td></tr>
+<tr><td>Different Prompts on NQ w/ LM-Prob</td><td>Different Prompts on NQ w/ LM-Prob</td><td>Different Prompts on NQ w/ LM-Prob</td><td>Different Prompts on NQ w/ LM-Prob</td></tr>
+<tr><td>GPT-3 2-shot</td><td>37.0</td><td>11.7</td><td>20.8</td></tr>
+<tr><td>GPT-3 4-shot</td><td>38.3</td><td>13.4</td><td>21.0</td></tr>
+<tr><td>GPT-3 8-shot</td><td>38.8</td><td>24.4</td><td>25.5</td></tr>
+<tr><td>GPT-3 16-shot</td><td>40.5</td><td>18.9</td><td>23.3</td></tr>
+<tr><td>GPT-3 64-shot</td><td>42.8</td><td>13.4</td><td>22.1</td></tr>
+<tr><td>OOD Prompts w/ LM-Prob</td><td>OOD Prompts w/ LM-Prob</td><td>OOD Prompts w/ LM-Prob</td><td>OOD Prompts w/ LM-Prob</td></tr>
+<tr><td>TQA i.i.d. Prompt</td><td>73.8</td><td>3.8</td><td>15.9</td></tr>
+<tr><td>NQ Prompt on TQA</td><td>73.0</td><td>1.6</td><td>15.2</td></tr>
+<tr><td>DPR-BERT NQ → TQA</td><td>33.1</td><td>33.1</td><td>35.2</td></tr>
+<tr><td>HQA i.i.d. Prompt</td><td>29.8</td><td>25.0</td><td>23.5</td></tr>
+<tr><td>NQ Prompt on HQA</td><td>27.7</td><td>24.1</td><td>25.2</td></tr>
+<tr><td>DPR-BERT NQ → HQA</td><td>23.6</td><td>45.7</td><td>42.4</td></tr>
+</tbody></table></div>
+<p>|                                    | Acc ↑                              | ECE ↓                              | Brier ↓                            |</p>
+<figcaption>Table 6: Accuracy, ECE, and Brier scores of GPT-3 and the DPR-BERT baseline. GPT-3 is better calibrated than supervised DPR-BERT on both in-domain and OOD settings.</figcaption>
+<p>置信度打分 我们比较了两种为 GPT-3 预测估计置信度的方法。LMProb：（归一化的）语言模型概率，也等价于困惑度的倒数，其定义为 Conf ≡ P ( w 1 w 2 . . . w n ) 1 N，其中 w 1 w 2 . . . w n 是答案中生成的 token。SelfCon：我们还探索使用自洽性（self-consistency，Wang et al., 2023）来获得置信度度量。遵循 Wang et al. (2023) 的做法，我们在解码时设置较高的温度值（0.7）并采样 10 次，以得到一组不同的预测。在所有生成的答案中，我们将出现频率最高的答案作为最终预测，并将其频率作为置信度分数。</p>
+<p>4 见附录图 2。</p>
+<p>6</p>
+<div class="tablewrap"><table><thead><tr><th>DPR-BERT NQ</th><th></th><th>LM-Prob NQ</th><th>Self-Con NQ</th><th>LM-Prob TriviaQA</th><th>LM-Prob HotpotQA</th></tr></thead><tbody>
+<tr><td>100%</td><td>36.1</td><td>40.5</td><td>40.2</td><td>73.8</td><td>29.8</td></tr>
+<tr><td>50%</td><td>41.9</td><td>58.8</td><td>62</td><td>88.5</td><td>47.6</td></tr>
+<tr><td>10%</td><td>60.1</td><td>83.1</td><td>77</td><td>95.4</td><td>68.1</td></tr>
+</tbody></table></div>
+<p>| DPR-BERT NQ   |      |   LM-Prob NQ |   Self-Con NQ |   LM-Prob TriviaQA |   LM-Prob HotpotQA |</p>
+<figcaption>Table 7: Selective prediction results. All numbers represent the accuracy (EM) at the corresponding coverage thresholds. For example, 100% means performance on the entire test set while 10% means the performance on the most confident 10% predictions. Both LM-Prob and Self-Con allow effective selective prediction with high accuracy on the most confident subsets. More results in Appendix D.</figcaption>
+<h2>4.2 RESULTS</h2>
+<p>尽管仍不完美，GPT-3（无论使用 LM-Prob 还是 Self-Con）的校准程度都优于有监督的 DPR-BERT（表 6）。大多数校准误差来自过度自信，即预测的置信度高于预期准确率。有趣的是，虽然增加提示中的示例数量可以提升准确率，但校准程度并未随之改善。例如，2-shot 的准确率比 64-shot 低 5.8 个百分点，但校准更好。此外，尽管分布外（OOD）迁移对有监督模型的校准是一个挑战（在 OOD 测试集上往往过度自信），但无论示例来自何处，GPT-3 都具有相似的校准表现。</p>
+<p>选择性预测的结果表明，置信度分数能够对模型预测进行排序（表 7）：置信度最高的预测具有明显更高的准确率。此外，GPT-3 的置信度分数更具区分度。例如，尽管 GPT-3 与 DPR-BERT 在 NQ 上的平均准确率相近，但置信度最高的前 10% 预测的准确率达到 83.1%，而 DPR-BERT 仅为 60.1%。这种选择性预测在实际场景中可能非常有用，例如，我们只信任模型给出的置信度最高的预测，并请人工验证其余预测，从而使 GPT-3 的使用更加可靠。</p>
+<p>要点（i）语言模型概率和自洽性频率能够使 GPT-3 获得比有监督 DPR-BERT 模型更好的校准，尤其是在 OOD 测试集上。（ii）增加提示中的示例数量可以提升准确率，但不一定能改善校准。（iii）我们可以基于 GPT-3 的置信度分数进行有效的选择性预测。</p>
+<h2>5 FACET 4: FACTUALITY VIA KNOWLEDGE UPDATING</h2>
+<p>尽管大型语言模型在其参数中存储了海量知识（Petroni et al., 2019），但模型有时会出错或知识过时，这使其在知识密集型任务中并不可靠。在本节中，我们通过改进提示方法来提升可靠性中的事实性这一方面。</p>
+<h2>5.1 MEMORIZATION VS UPDATING</h2>
+<p>模型越大，其能记忆的内容就越多（Carlini et al., 2023），这引发了一个担忧：像 GPT-3 这样的大型模型能否在需要时遗忘已记忆的知识并更新其知识。</p>
+<p>实验设置 我们的评估设置受到 Longpre et al. (2021) 的启发，他们对反事实场景进行了推理。具体而言，我们从 NQ 和 SQuAD 的训练集划分中分别采样 36K 和 18K 个问题（分别使用 MRQA 提供的划分）。我们首先使用来自每个数据集的 16 个演示示例作为闭卷问答（closed-book QA）的提示。我们假设，如果 GPT-3 在闭卷设置下答对了某个问题，那么它已经记住了这条知识。我们保留 GPT-3 在闭卷设置下答对的问题集合（NQ 为 21188 个问题；SQuAD 为 7035 个问题），并为这些问题附加一个支持替代答案的反事实段落。我们使用 Longpre et al. (2021) 的实体替换（entity-swap）方法来构建这些反事实段落：对于每个问题，取其标准段落，并将标准答案实体替换为从同一问答语料库中采样得到的另一个同类型实体。经过这种实体替换后，反事实段落支持的是替换后的答案而非原始答案。我们的期望是，在给定该反事实段落的情况下，模型应生成这个更新后的答案，而不是其原本记忆的答案。我们随机采样 16 个演示示例作为提示，并在提示中使用由答案替换后的段落、问题和替换答案组成的三元组 ( 〈 P&#x27;, Q, A&#x27; 〉 ) 来指定基于段落进行阅读理解的任务。</p>
+<p>7</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>NQ</th><th>TriviaQA</th><th>SQuAD</th></tr></thead><tbody>
+<tr><td>DPR-BERT (supervised)</td><td>41.5</td><td>56.8</td><td>24.1</td></tr>
+<tr><td>Atlas-11B (64-shot)</td><td>42.4</td><td>74.5</td><td>-</td></tr>
+<tr><td>GPT-3 Closed-Book</td><td>40.6</td><td>73.6</td><td>20.2</td></tr>
+<tr><td>+ Contriever top-5</td><td>43.3 (61.8%)</td><td>75.6 (69.6%)</td><td>31.7 (48.8%)</td></tr>
+<tr><td>+ Contriever top-10</td><td>44.2 (70.5%)</td><td>76.0 (75.1%)</td><td>34.0 (57.7%)</td></tr>
+</tbody></table></div>
+<p>|                       | NQ           | TriviaQA     | SQuAD        |</p>
+<figcaption>Table 9: GPT-3 16-shot prompting results on open-domain QA datasets. We use Exact Match as the metric. For Contriever results, we additionally show the retriever&#x27;s recall in brackets. Adding retrieval to GPT-3 consistently improves QA accuracy.</figcaption>
+<p>衡量 GPT-3 能在多大程度上更新其知识 有三种可能的结果：1）模型保留记忆的答案；2）模型预测出更新后的答案（即反事实段落中的替换实体）；3）模型预测出其他某个答案。我们测量这些结果所占的比例，并希望模型能更频繁地更新答案。作为基线，我们纳入了 Longpre et al. (2021) 的结果：一个在 NQ 和 NewsQA 上训练的微调 T5 阅读器模型，并配备 DPR 检索器。</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>Retain ↓</th><th>Update ↑</th><th>Other ↓</th></tr></thead><tbody>
+<tr><td>NQ with Code-Davinci-002</td><td>NQ with Code-Davinci-002</td><td>NQ with Code-Davinci-002</td><td>NQ with Code-Davinci-002</td></tr>
+<tr><td>T5 (770M, supervised)</td><td>20%</td><td>33%</td><td>47%</td></tr>
+<tr><td>GPT-3</td><td>4.5%</td><td>85.4%</td><td>10.2%</td></tr>
+<tr><td>SQuAD with Code-Davinci-002</td><td>SQuAD with Code-Davinci-002</td><td>SQuAD with Code-Davinci-002</td><td>SQuAD with Code-Davinci-002</td></tr>
+<tr><td>GPT-3</td><td>7.1%</td><td>84.8%</td><td>8.1%</td></tr>
+<tr><td>NQ with different GPT-3 models</td><td>NQ with different GPT-3 models</td><td>NQ with different GPT-3 models</td><td>NQ with different GPT-3 models</td></tr>
+<tr><td>Text-Davinci-001 (175B)</td><td>7.2%</td><td>57.9%</td><td>34.9%</td></tr>
+<tr><td>Text-Curie-001 (6.7B)</td><td>14.8%</td><td>40.0%</td><td>45.2%</td></tr>
+</tbody></table></div>
+<p>|                                | Retain ↓                       | Update ↑                       | Other ↓                        |</p>
+<p>结果 如表 8 所示，我们发现当使用反事实三元组 ( 〈 P&#x27;, Q, A&#x27; 〉 ) 进行提示时，GPT-3 大约能在 85% 的情况下完成更新，远高于有监督基线（表 8）。对比 Text-Davinci-001 和 Text-Curie001，更大的模型在反事实段落中也能更好地更新为新答案。</p>
+<p>表 8：NQ 和 SQuAD 中已记忆答案的上下文知识更新（in-context knowledge updating）结果。当在提示中给出反事实示例时，GPT-3 大约在 85% 的情况下更新其答案，远高于有监督模型。此外，更大的模型更擅长进行上下文知识更新。</p>
+<h2>5.2 RETRIEVAL-AUGMENTED OPEN-DOMAIN QA</h2>
+<p>大型语言模型可以基于模型中存储的知识来回答闭卷问答（closed-book QA）问题（Roberts et al., 2020）。然而，提示（prompt）可以明智地加入更多相关信息，尤其是鉴于我们在上一节中的发现——GPT-3 能够利用提示中的信息更新其知识。因此，我们探索通过检索增强提示（retrieval-augmented prompts）来改进事实性问答。</p>
+<p>方法 我们使用无监督的 Contriever 模型（Izacard et al., 2022a）：对于测试问题，从 Wikipedia 转储中检索排名最靠前的若干段落，将其拼接后前置到测试问题之前。由于上下文长度受限，我们只将检索到的段落前置到测试问题之前，而不前置到演示示例（demo examples）之前，因此演示示例仅以问答对的形式出现。我们将这种检索器增强的方法与闭卷基线进行对比，后者不在提示中加入检索到的段落。检索增强提示与闭卷提示所使用的演示示例完全相同。</p>
+<p>结果 将检索到的段落加入提示中，能够持续提升 GPT-3 在全部三个开放域问答数据集上的性能（表 9），其中在 SQuAD 上的提升尤为显著（可能是因为 SQuAD 中的答案是 Wikipedia 段落中的片段，而非自由格式的答案）。此外，检索的召回率越高，性能越好。</p>
+<p>8</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>Overall</th><th>Sub-Q1</th><th>Sub-Q2</th></tr></thead><tbody>
+<tr><td>Standard Prompting</td><td>18.0 / 28.1</td><td>40.1 / 49.6</td><td>43.3 / 58.4</td></tr>
+<tr><td>CoT</td><td>25.2 / 35.2</td><td>30.3 / 37.4</td><td>-</td></tr>
+<tr><td>CoT + Human Sub-Q1</td><td>30.0 / 42.3</td><td>44.2 / 54.1</td><td>-</td></tr>
+<tr><td>CoT + Human Sub-Q1 + Gold Sub-A1</td><td>44.3 / 59.0</td><td>-</td><td>-</td></tr>
+</tbody></table></div>
+<p>|                                  | Overall     | Sub-Q1      | Sub-Q2      |</p>
+<p>表 10：HotpotQA 及其分解子问题的结果（我们报告 EM / F1）。在提示中加入分解的子问题会使模型调整其后续步骤的预测，并显著提高整体答案的准确率。</p>
+<h2>5.3 REASONING-AUGMENTED MULTI-HOP QA</h2>
+<p>上述实验证明了通过上下文知识更新来确保 GPT-3 事实性的有效性；然而，这主要局限于简单的单跳事实性问题。在实际应用中，许多用户查询是多跳的——它们需要对事实知识进行多步推理。确保多跳问题的事实性还面临额外的挑战：模型可能因为错误地推导出推理步骤而失败。为了应对这一更具挑战性的多跳场景，我们研究了是否可以通过在提示中加入人工撰写的问题分解来提升 GPT-3 的多跳推理能力。</p>
+<p>HotpotQA 与分解子问题 我们在实验中使用 HotpotQA 数据集（Yang et al., 2018），该数据集由需要至少两步推理的多跳问题组成。我们采用 Tang et al. (2021) 的问题分解，其中 HotpotQA 的问题被标注为分解后的（单跳）子问题及相应的中间答案。</p>
+<p>基线：思维链提示 思维链（Chain-of-Thought, CoT）提示（Wei et al., 2022b）是一种专为多步问题设计的新型提示方法，我们在实验中将其作为基线，即为所有示例提供人工撰写的推理步骤，以诱导模型在测试示例上进行类似的推理。我们测量 GPT-3 在 HotpotQA（整体）以及分解后的单跳子问题上最终答案预测的准确率。从表 10 的第一行可以看到，正如预期，标准提示在单跳子问题上的准确率高于整个多跳问题。CoT 会生成完整的推理链，包括其分解的子问题以及子问题的中间答案，其在多跳问题上的准确率高于标准提示（表 10 第二行）。</p>
+<p>加入人工分解 我们不再依赖 GPT-3 自身生成推理链，而是将人工撰写的问题分解加入提示中。当加入推理第一步的人工撰写子问题时（表 10 倒数第二行），我们看到整体多跳问答准确率和子问题准确率均有明显提升。此外，当我们进一步加入推理链中第一个分解问题的人工撰写问答对时（表 10 最后一行），多跳问答性能获得了更大的提升。这表明 GPT-3 能够适应来自人类的问题分解信息，并推导出后续的推理步骤，最终得到正确答案，从而提供了更好的可控性和可靠性。</p>
+<p>要点：( i ) 添加检索到的证据段落可以提升 GPT-3 在事实性问答（QA）上的性能。( ii ) 当提供的段落与其记忆的知识相冲突时，GPT-3 能够更新其知识。( iii ) 引入人工撰写的问题分解可以纠正 GPT-3 的推理链，并提升其在多跳问答（multi-hop QA）上的性能。</p>
+<h2>6 CONCLUSION</h2>
+<p>我们的工作从四个关键方面系统研究了 GPT-3 的可靠性：泛化性、公平性、校准性和事实性。我们开发了有效的提示策略，使 GPT-3 在这些方面大幅超越监督模型。我们的工作揭示了大语言模型（LLMs）的新见解，并为 GPT-3 的用户提供了实用建议。我们希望我们的工作能够启发更多未来工作：（1）考察可靠性的更多方面，例如避免有害生成；（2）将本文中的提示方法应用于更多现实世界应用，例如结合人类反馈进行协作式多步规划；（3）进一步探索更有效的提示策略以提升可靠性，例如对语言模型概率进行事后校准（post-hoc calibration）。</p>
+<p>9</p>
+<h2>ETHICAL STATEMENT</h2>
+<p>GPT-3 的伦理使用　本项目的目标是避免 GPT-3 的潜在危害，我们所有的 GPT-3 实验都是为了更好地研究和提升可靠性而开展的。我们相信我们的实验和发现能够提升可靠性，并使模型的使用更加安全。特别是，我们关于社会偏见与公平性的章节是 GPT-3 伦理使用的一个关键方面。我们提供了证据表明该模型会做出有偏见的预测，尤其是当提示中的演示示例具有偏斜的人口分布时。尽管我们探索了缓解这些偏见的方法，但该模型仍远非完美，要进一步提升其公平性还需要大量的工作。我们将我们的工作视为迈向更符合伦理地使用 GPT-3 的初步一步。</p>
+<p>本工作的局限性　我们指出了本工作的若干局限性，并为未来工作提出了一系列开放性问题。</p>
+<h2>A MORE RELATED WORK</h2>
+<p>对分布偏移的鲁棒性。众所周知，机器学习模型会过拟合其训练分布，当测试分布与训练分布不一致时，其性能往往会下降。对于语言模型，已有研究考察了多种形式的分布偏移。例如，域偏移给大语言模型（LLM）在问答（Talmor &amp;Berant, 2019; Fisch et al., 2019）和文本分类（Hendrycks et al., 2020; Arora et al., 2021）任务上带来了巨大挑战；各种形式的对抗攻击即使仅通过策略性的同义词替换、改写或插入干扰项就能击溃 LLM（Jin et al., 2020; Li et al., 2020; Ribeiro et al., 2018; Si et al., 2019; 2021a; Jia &amp; Liang, 2017; Si et al., 2021b）；已有研究表明，LLM 会利用训练数据中的捷径或虚假相关性，从而在反例测试样本上失败（McCoy et al., 2019; Zhang et al., 2019; Poliak et al., 2018; Gururangan et al., 2018）；LLM 在训练期间未见过的新组合结构上也会失败（Kim &amp; Linzen, 2020; Keysers et al., 2020; Bogin et al., 2022）。在现实场景中，各种形式的分布偏移都可能发生，可靠的模型即使在遇到此类分布外（OOD）样本时也应表现良好。直观上，上下文少样本提示（in-context few-shot prompting）受到的 OOD 性能退化影响应当更小，因为预训练参数得以保留，这与有监督微调的情况不同。我们对域偏移、精心构建的挑战集以及虚假相关性进行了一系列实证评估，以验证这一假设。</p>
+<p>偏见与公平性。语言模型生成有毒或有偏见的内容可能造成严重伤害，尤其是对遭受偏见的群体（Bender et al., 2021）。一系列基准测试（benchmark）已被开发出来，用以表明 LLM 会生成有毒输出（Gehman et al., 2020）、包含性别偏见（Rudinger et al., 2018; Zhao et al., 2018）及其他类别的社会偏见（Nangia et al., 2020; Nadeem et al., 2021; Parrish et al., 2022），并且在少数人口群体（Koh et al., 2021; Harris et al., 2022）或方言变体（Ziems et al., 2022; Tan et al., 2020）上表现不佳。理想情况下，LLM 不应表现出有偏见的行为，也不应歧视任何群体。尽管这些评估大多侧重于在零样本设置下评估 LLM 的内部表征，或在有监督设置下评估特定下游应用中的偏见，但这些偏见在少样本设置下如何随不同提示方案而变化仍不清楚，而这正是我们分析的重点。一项密切相关的工作是 Lucy &amp; Bamman (2021)，该工作研究了 GPT-3 生成故事中的表征偏见。我们则在指代消解和问答这两个下游任务上进行评估。除少样本提示之外，Solaiman &amp; Dennison (2021) 提出了一种使语言模型与人类价值观对齐的通用方法，但其涉及代价高昂的迭代训练。</p>
+<p>不确定性校准。任何模型都不可能完美，因此用户能够识别模型的错误至关重要，尤其是在信任错误的模型预测可能造成严重危害的高风险场景中。帮助识别错误模型预测的一种重要方式是为模型预测获得校准良好的置信度分数。根据定义，经过校准的置信度（概率）分数应当与预测的期望准确率相匹配（Platt, 1999; Naeini et al., 2015; Guo et al., 2017）。这样，用户可以更加信任高置信度的预测，并舍弃低置信度的预测。尽管已有多种方法被提出用于为语言模型获取置信度分数并进行事后校准（Jiang et al., 2021; Desai &amp; Durrett, 2020; Ye &amp; Durrett, 2022），但它们大多聚焦于分类场景，而非自由形式生成——后者在 GPT-3 的使用中更为常见。在本工作中，我们探索了两种简单（但出奇有效）的为 GPT-3 生成的答案获取置信度分数的方法，并分析了规模扩展（scaling）与提示设计的影响。为了研究 GPT-3 风格大语言模型（LLM）的校准，Lin et al. (2022a) 探索了以言语词汇表达不确定性的想法，但仅限于数学问题。Mielke et al. (2022) 研究了对话模型上的语言校准。Kadavath et al. (2022) 研究了采用多选题设置的情形，在这种情况下获取置信度分数要容易得多（因为模型只需预测一个 token 来指示应选择哪个选项，而无需生成完整的答案字符串）。我们与他们的不同之处在于：1）我们专注于获取概率形式的置信度分数，而非言语式的不确定性表达；2）我们研究的是更通用、更贴近现实的自由形式答案生成场景；3）我们不涉及对语言模型的微调或任何额外训练。</p>
+<p>17</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>SQuAD</th><th>HotpotQA</th><th>TriviaQA</th><th>NewsQA</th><th>SearchQA</th><th>NQ</th><th>Average</th></tr></thead><tbody>
+<tr><td>D-Net</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>84.1</td></tr>
+<tr><td>Delphi</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>82.3</td></tr>
+<tr><td>MultiFT</td><td>91.8</td><td>81.0</td><td>80.1</td><td>72.3</td><td>84.7</td><td>79.5</td><td>81.6</td></tr>
+<tr><td>MADE</td><td>91.9</td><td>80.7</td><td>80.1</td><td>71.8</td><td>84.5</td><td>79.5</td><td>81.4</td></tr>
+<tr><td>T5-Finetune</td><td>94.9</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>T5-PromptTune</td><td>94.8</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>GPT-3 Source-P</td><td>87.8</td><td>78.9</td><td>88.6</td><td>60.1</td><td>87.3</td><td>76.2</td><td>79.8</td></tr>
+</tbody></table></div>
+<p>|                | SQuAD   | HotpotQA   | TriviaQA   | NewsQA   | SearchQA   | NQ   | Average   |</p>
+<figcaption>Table 11: Results on MRQA in-domain datasets. We use the F1 metric for all datasets. D-Net and Delphi results are taken from the MRQA system report (Fisch et al., 2019) which only reported the average performance. MultiFT and MADE results are taken from Friedman et al. (2021). T5Finetune and T5-PromptTune results are from the prompt tuning paper (Lester et al., 2021) which only trained on the SQuAD datsaet. GPT-3 few-shot performance slightly lags behind these supervised baselines in the in-domain setting.</figcaption>
+<p>知识更新。尽管像 GPT-3 这样的大语言模型（LLM）是在非常大规模的语料库上进行预训练的，但它们在事实性知识方面仍远非完美。一方面，即使在预训练期间已经见过的领域（例如 Wikipedia）上，它们仍然会犯事实性错误；另一方面，它们是在静态语料库上进行预训练的，因此其知识可能会过时。为了让 LLM 能够充当可靠的知识库（Petroni et al., 2019）或驱动知识密集型的下游应用（Petroni et al., 2021），保持 LLM 的知识在事实上正确且最新是十分重要的。最近的一系列工作尝试通过对模型神经元进行针对性修改来编辑 LLM 中的事实性知识（Cao et al., 2021; Mitchell et al., 2021; 2022）。然而，这些方法很难应用于 GPT-3，因为它的规模要大得多，并且通常被视为无法访问内部参数的黑盒。为了解决这一问题，本文中我们探索了通过在提示中直接附加相关知识片段以引导模型预测、从而执行上下文知识更新（in-context knowledge updating）的可行性。由于已有研究表明更大的模型更擅长记忆（Carlini et al., 2023），我们分析了是否有可能让更大的模型遗忘其已记忆的知识，并适应提示中呈现的新信息，尤其是当二者发生冲突时。添加检索到的段落这一想法在概念上类似于针对知识密集型 NLP 的检索增强方法这一系列工作（Lewis et al., 2020; Izacard et al., 2022b; Guu et al., 2020）。然而，这些方法仍然需要监督训练，而我们关注的是少样本提示（few-shot prompting）的设定，即语言模型的所有参数均被冻结。</p>
+<h2>B ADDITIONAL RESULTS: GENERALIZABILITY</h2>
+<p>我们提供了完整的实验结果以及与更多基线的比较。</p>
+<p>MRQA 表 11 和表 12 给出了 MRQA 上的详细结果。在基线方面，我们纳入了 MRQA 竞赛中表现最佳的系统：D-Net（Li et al., 2019）和 Delphi（Longpre et al., 2019），以及近期的基于适配器（adapter）的鲁棒调优方法 MADE（Friedman et al., 2021）和它们的多数据集微调基线。我们还报告了使用 T5 进行微调以及提示调优（prompt tuning，Lester et al., 2021）的结果，该方法在 MRQA 上取得了最先进的分布外（OOD）迁移结果。请注意，该 T5 基线仅使用 SQuAD 作为域内训练数据。</p>
+<p>AdvGLUE 和 Contrast Sets 表 13 和表 14 给出了 AdvGLUE 和 Contrast Sets 上的详细结果，其中 GPT-3 展现出比有监督基线更好的泛化能力。</p>
+<p>虚假相关 表 16 展示了 HANS 上基于三个虚假特征的完整性能分解。可以看到，对于 HANS 中的子序列（subsequence）和成分（constituent）特征，GPT-3 在支持偏置与反对偏置的子集之间仍然存在显著的性能差距。这留下了一些耐人寻味的问题，例如为什么这种差距只出现在某些偏置特征上而不出现在其他特征上，以及这种虚假偏置是如何产生的（最有可能源于预训练），我们将对这些问题的更深入分析留待未来工作。</p>
+<p>18</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>BioASQ</th><th>DROP</th><th>DuoRC</th><th>RACE</th><th>RE</th><th>TextbookQA</th><th>Average</th></tr></thead><tbody>
+<tr><td>D-Net</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>69.7</td></tr>
+<tr><td>Delphi</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>68.5</td></tr>
+<tr><td>MultiFT</td><td>64.1</td><td>51.5</td><td>63.0</td><td>47.6</td><td>87.3</td><td>59.0</td><td>62.1</td></tr>
+<tr><td>MADE</td><td>66.5</td><td>50.9</td><td>67.2</td><td>47.8</td><td>86.7</td><td>58.5</td><td>62.9</td></tr>
+<tr><td>T5-Finetune</td><td>77.9</td><td>68.9</td><td>68.9</td><td>59.8</td><td>88.4</td><td>54.3</td><td>69.7</td></tr>
+<tr><td>T5-PromptTune</td><td>79.1</td><td>67.1</td><td>67.7</td><td>60.7</td><td>88.8</td><td>66.8</td><td>71.7</td></tr>
+<tr><td>GPT-3 Source-P</td><td>86.2</td><td>67.7</td><td>70.5</td><td>69.0</td><td>89.3</td><td>84.8</td><td>77.2</td></tr>
+<tr><td>GPT-3 Target-P</td><td>85.9</td><td>68.9</td><td>69.7</td><td>65.4</td><td>91.0</td><td>82.1</td><td>77.2</td></tr>
+</tbody></table></div>
+<p>|                | BioASQ   | DROP   | DuoRC   | RACE   | RE   | TextbookQA   |   Average |</p>
+<figcaption>Table 12: Results on MRQA OOD datasets. ID-P (second last row) uses a fixed set of sampled demo examples from the in-domain datasets and evaluates on these OOD datasets, while OOD-P (last row) uses sampled demo examples from each of these OOD datasets for evaluation. GPT-3 significantly outperforms all other supervised baselines on these OOD datasets, moreover, using the in-domain prompt successfully transfers to OOD test data, achieving the same average performance as using demos examples drawn from these OOD datasets as the prompt.</figcaption>
+<div class="tablewrap"><table><thead><tr><th></th><th>SST-2</th><th>MNLI</th><th>RTE</th><th>QNLI</th><th>QQP</th><th>Average</th></tr></thead><tbody>
+<tr><td>Clean Test Sets</td><td>Clean Test Sets</td><td>Clean Test Sets</td><td>Clean Test Sets</td><td>Clean Test Sets</td><td>Clean Test Sets</td><td>Clean Test Sets</td></tr>
+<tr><td>RoBERTa</td><td>96.0</td><td>89.8</td><td>86.6</td><td>94.1</td><td>92.0</td><td>91.7</td></tr>
+<tr><td>ALBERT</td><td>95.2</td><td>89.6</td><td>88.4</td><td>95.3</td><td>92.3</td><td>92.2</td></tr>
+<tr><td>DeBERTa</td><td>96.3</td><td>90.9</td><td>90.2</td><td>94.9</td><td>92.3</td><td>92.9</td></tr>
+<tr><td>GPT-3</td><td>96.1</td><td>78.1</td><td>83.4</td><td>79.8</td><td>83.5</td><td>84.2</td></tr>
+<tr><td>Adversarial Test Sets</td><td>Adversarial Test Sets</td><td>Adversarial Test Sets</td><td>Adversarial Test Sets</td><td>Adversarial Test Sets</td><td>Adversarial Test Sets</td><td>Adversarial Test Sets</td></tr>
+<tr><td>RoBERTa</td><td>58.5</td><td>45.2</td><td>45.4</td><td>52.5</td><td>57.1</td><td>51.7</td></tr>
+<tr><td>ALBERT</td><td>66.8</td><td>48.0</td><td>73.0</td><td>63.8</td><td>56.4</td><td>61.6</td></tr>
+<tr><td>DeBERTa</td><td>57.9</td><td>55.5</td><td>78.9</td><td>57.9</td><td>60.4</td><td>62.1</td></tr>
+<tr><td>GPT-3</td><td>78.4</td><td>56.4</td><td>87.7</td><td>57.4</td><td>66.7</td><td>69.3</td></tr>
+</tbody></table></div>
+<p>|                       | SST-2                 | MNLI                  | RTE                   | QNLI                  | QQP                   | Average               |</p>
+<figcaption>Table 13: Results on the clean and adversarial test sets of AdvGLUE, we use accuracy as the metric for all datasets. For MNLI, we report the average performance on the matched and mismatched dev sets. The supervised baselines are trained on the clean training data, and GPT-3 uses few-shot prompts sampled from the clean training data. While GPT-3 few-shot prompting lags behind supervised models on clean test sets, it significantly outperforms the supervised models on the adversarial sets. That being said, we still note a performance drop of GPT-3 on the adversarial test sets when using clean demo examples.</figcaption>
+<p>在表 15 中，我们对演示示例（demos）数量以及不同 GPT-3 变体的影响进行了额外的消融实验。当使用更少的来自 QQP 的演示示例时，尽管在 QQP 测试集上略有下降，GPT-3 实际上仍然保持鲁棒（在 PAWS 上的准确率甚至高于 16-shot 结果）。另一方面，使用 Text-Davinci-001（175B）和更小的 Text-Curie-001（6.7B）在 QQP 测试集和 PAWS 挑战测试集上的表现都要差得多。</p>
+<h2>C ADDITIONAL RESULTS: SOCIAL BIASES</h2>
+<p>我们还按不同的偏见类别对表 17 中使用不同提示所得的准确率和偏见分数进行了细分。我们观察到，不同类别之间可能存在很大差异。此外，我们用下划线标出了演示示例所来自的类别，并观察到提示中包含同类别演示示例与偏见分数之间并不相关。例如，在 Ambig-Pro 情形中，我们使用了来自国籍（Nationality）类别的支持偏见的示例，但偏见分数仍然很低；而外貌与残障（Physical Appearance and Disability）类别的偏见分数却变得高得多，即使有偏见的示例并非来自这些类别。</p>
+<p>19</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>IMDB - Original</th><th>IMDB - Contrast</th><th>Gap ↓</th></tr></thead><tbody>
+<tr><td>BERT</td><td>93.8</td><td>84.2</td><td>9.6</td></tr>
+<tr><td>GPT-3</td><td>94.1</td><td>93.6</td><td>0.5</td></tr>
+<tr><td></td><td>QuoREF - Original</td><td>QuoREF - Contrast</td><td>Gap ↓</td></tr>
+<tr><td>XLNet</td><td>70.5</td><td>55.4</td><td>15.1</td></tr>
+<tr><td>GPT-3</td><td>86.1</td><td>77.0</td><td>9.1</td></tr>
+<tr><td></td><td>BoolQ - Original</td><td>BoolQ - Contrast</td><td>Gap ↓</td></tr>
+<tr><td>RoBERTa</td><td>86.1</td><td>71.1</td><td>15.0</td></tr>
+<tr><td>GPT-3</td><td>85.5</td><td>80.0</td><td>5.5</td></tr>
+</tbody></table></div>
+<p>|         | IMDB - Original   | IMDB - Contrast   | Gap ↓   |</p>
+<figcaption>Table 14: Results on Contrast Sets. For IMDB and BoolQ, we report accuracy; for QuoREF, we report F1. Apart from the performance on the original and contrast sets of the three datasets, we also note the gap between performance on the original and contrast sets. We see a clear trend that GPT-3 incurs a smaller gap than the supervised models.</figcaption>
+<div class="tablewrap"><table><thead><tr><th></th><th>QQP (ID)</th><th>PAWS (OOD)</th><th>Gap</th></tr></thead><tbody>
+<tr><td>BERT (supervised)</td><td>91.3</td><td>40.1</td><td>51.2</td></tr>
+<tr><td>RoBERTa (supervised)</td><td>89</td><td>39.5</td><td>49.5</td></tr>
+<tr><td>Code-Davinci-002 (4-shots)</td><td>78.2</td><td>80.5</td><td>-2.3</td></tr>
+<tr><td>Code-Davinci-002 (16-shots)</td><td>83.5</td><td>73.7</td><td>9.8</td></tr>
+<tr><td>Text-Davinci-001 (16-shots)</td><td>72.4</td><td>42.4</td><td>30</td></tr>
+<tr><td>Text-Curie-001 (16-shots)</td><td>40.1</td><td>32.1</td><td>8</td></tr>
+</tbody></table></div>
+<p>|                             |   QQP (ID) |   PAWS (OOD) |   Gap |</p>
+<figcaption>Table 15: Ablation for the impact of the number of demos and different GPT-3 model variants on MNLI-HANS.</figcaption>
+<h2>D ADDITIONAL RESULTS: CALIBRATION</h2>
+<p>表 18 中的完整选择性预测（selective prediction）结果表明，置信度分数可用于对模型预测进行排序。我们可以看到一个明显的趋势：置信度最高的预测具有高得多的准确率。</p>
+<p>图 2 中的可靠性图（reliability diagram）表明，在大多数情况下，校准误差来自过度自信，即预测的置信度高于期望准确率。同样值得注意的是，尽管分布外（OOD）迁移对监督模型的校准是一大挑战——监督模型往往在 OOD 测试集上表现出过度自信——但 GPT-3 在使用域内（in-domain）或 OOD 演示示例作为提示时，表现出相似的校准结果（图 2 左下角的图）。</p>
+<p>为了进一步厘清更高准确率与更好校准各自的影响，我们在表 19 中对选择性预测进行了受控评估：我们对 NQ 测试集进行子采样，使得三种校准方法在该测试集上取得相同的准确率。我们可以看到一个明显的趋势：尽管 DPR-BERT 与 GPT-3 在该子采样测试集上取得了相同的准确率，但 DPR-BERT 在置信度最高的预测上取得了高得多的准确率，这表明了更好校准的有用性。</p>
+<h2>E.1 IMPACT OF PROMPTS FOR MEMORIZATION VS UPDATING</h2>
+<p>对于知识更新，我们比较了下文详述的几种不同的提示设计；在所有情况下，我们都随机采样 16 个演示样本作为提示。</p>
+<div class="tablewrap"><table><thead><tr><th>HANS Category</th><th>GPT-3 Acc.</th></tr></thead><tbody>
+<tr><td>Lexical Overlap - Entailment</td><td>87.9</td></tr>
+<tr><td>Lexical Overlap - Non-Entailment</td><td>96.9</td></tr>
+<tr><td>Subsequence - Entailment</td><td>84</td></tr>
+<tr><td>Subsequence - Non-Entailment</td><td>53.7</td></tr>
+<tr><td>Constituent - Entailment</td><td>87.2</td></tr>
+<tr><td>Constituent - Non-Entailment</td><td>42.2</td></tr>
+</tbody></table></div>
+<p>| HANS Category                    |   GPT-3 Acc. |</p>
+<figcaption>Table 16: Breakdown of GPT-3 results on HANS by categories. All demo examples in the prompt are from MNLI. GPT-3 still suffers significant performance gaps between the entailment (biassupporting) and non-entailment (bias-countering) subsets for the subsequence and constituent features in HANS.</figcaption>
+<div class="tablewrap"><table><thead><tr><th></th><th>Balanced.Acc ↑</th><th>Balanced.Bias ↓</th><th>Ambig-Pro.Acc ↑</th><th>Ambig-Pro.Bias ↓</th><th>Ambig-Anti.Acc ↑</th><th>Ambig-Anti.Bias ↓</th></tr></thead><tbody>
+<tr><td>SES</td><td>96.4 / 74.2</td><td>3.2 / 0.0</td><td>14.2 / 99.2</td><td>-12.6 / 0.0</td><td>8.4 / 99.6</td><td>-6.4 / 0.0</td></tr>
+<tr><td>Sexual orientation</td><td>97.4 / 76.3</td><td>1.6 / 1.2</td><td>1.9 / 98.4</td><td>19.1 / -0.9</td><td>2.8 / 97.2</td><td>17.2 / -0.9</td></tr>
+<tr><td>Religion</td><td>97.0 / 75.8</td><td>1.8 / 0.5</td><td>0.4 / 98.0</td><td>35.2 / 1.2</td><td>1.0 / 97.2</td><td>24.6 / 1.6</td></tr>
+<tr><td>Race</td><td>99.8 / 85.1</td><td>-0.1 / -0.5</td><td>1.2 / 99.0</td><td>4.0 / 0.1</td><td>2.7 / 98.9</td><td>3.7 / 0.1</td></tr>
+<tr><td>Physical Appearance</td><td>97.4 / 56.0</td><td>2.6 / 18.8</td><td>1.4 / 87.8</td><td>75.0 / 14.8</td><td>0.6 / 86.2</td><td>77.0 / 14.8</td></tr>
+<tr><td>Nationality</td><td>98.2 / 80.8</td><td>1.4 / -11.6</td><td>1.0 / 99.0</td><td>-0.2 / 0.0</td><td>1.0 / 98.6</td><td>0.6 / 0.0</td></tr>
+<tr><td>Gender identity</td><td>99.0 / 66.8</td><td>0.6 / -3.9</td><td>6.0 / 98.6</td><td>5.6 / 0.4</td><td>4.6 / 98.8</td><td>3.8 / 0.4</td></tr>
+<tr><td>Disability</td><td>97.4 / 74.2</td><td>2.2 / 8.5</td><td>0.0 / 96.6</td><td>85.2 / 6.0</td><td>0.2 / 97.2</td><td>82.6 / 4.8</td></tr>
+<tr><td>Age</td><td>82.2 / 76.6</td><td>13.0 / 8.1</td><td>0.0 / 95.4</td><td>52.0 / 12.4</td><td>0.4 / 95.6</td><td>48.4 / 12.0</td></tr>
+</tbody></table></div>
+<p>|                     | Balanced.Acc ↑   | Balanced.Bias ↓   | Ambig-Pro.Acc ↑   | Ambig-Pro.Bias ↓   | Ambig-Anti.Acc ↑   | Ambig-Anti.Bias ↓   |</p>
+<figcaption>Table 17: Breakdown of accuracy and bias score results on BBQ. For accuracy and bias scores, the first number represents the ambiguous set and the second number represents the disambiguated set. Underlined numbers indicate that there are demo examples in the prompt from the same bias category.</figcaption>
+<p>如表 20 所示，我们发现提示设计对知识更新行为有很大影响。特别是，仅展示原始的段落-问题-答案三元组 ( 〈 P, Q, A 〉 ) 仍会导致较高的记忆比率；然而，当使用反事实三元组 ( 〈 P&#x27;, Q, A&#x27; 〉 ) 进行提示时，GPT-3 能够在 85% 的情况下完成更新，且其记忆比率远低于监督模型。</p>
+<h2>E.2 TARGETED IN-CONTEXT KNOWLEDGE UPDATING</h2>
+<p>上一节的实验表明，当提示中给出的新知识与 GPT-3 所记忆的知识发生冲突时，GPT-3 有望适应这些新知识。上述分析缺失的一个方面是，我们能否进行有针对性的知识更新：当给定一条知识更新时，我们期望模型对所有与该知识相关的问题预测出更新后的答案，而不改变其对其他无关问题的答案。为了评估模型在这方面的行为，我们采用了一种更接近近期知识更新文献（Cao et al., 2021; Mitchell et al., 2021）的评估设置。</p>
+<p>实验设置 我们使用来自 Mitchell et al. (2021) 的两个评估数据集：1) 我们首先使用事实核查数据集 FEVER（Thorne et al., 2018）：每个论断需要进行二元的真/假判断。我们创建与 GPT-3 原始预测标签相反的编辑标签。例如，对于一个测试样例，如果 GPT-3 的原始预测为真，那么用于编辑的新标签将为假。我们以支持目标编辑标签的自然语句形式呈现知识更新。然后我们测试 GPT-3 是否会对原始测试论断的改写版本预测出目标标签。我们将模型在这些改写上的准确率作为编辑成功率。我们从与测试集不重叠的训练数据中采样一个同等规模的集合作为无关问题集合。预期的行为是，在提示中加入知识更新不会影响模型在这些无关问题上的表现。我们将加入知识更新前后在该无关集合上的性能下降幅度作为准确率回撤。2) 我们还使用 zsRE 问答数据集（Levy et al., 2017）。对于每个测试问题，用于编辑的目标标签是从一个较小的问答（QA）模型的预测中随机采样得到的，该预测不同于 GPT-3 的原始预测。类似地，我们将模型在改写后的测试问题上的准确率作为成功率，并将模型在一组随机采样的不重叠训练问题上的准确率下降作为准确率回撤。</p>
+<p>21</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>DPR-BERT NQ</th><th>LM-Prob NQ</th><th>Self-Con NQ</th><th>LM-Prob TriviaQA</th><th>LM-Prob HotpotQA</th></tr></thead><tbody>
+<tr><td>100%</td><td>36.1</td><td>40.5</td><td>40.2</td><td>73.8</td><td>29.8</td></tr>
+<tr><td>90%</td><td>38</td><td>43.7</td><td>44.3</td><td>78.3</td><td>32.7</td></tr>
+<tr><td>80%</td><td>39.5</td><td>46.8</td><td>48.7</td><td>81.7</td><td>36</td></tr>
+<tr><td>70%</td><td>40.6</td><td>50.2</td><td>53.1</td><td>84.1</td><td>39.7</td></tr>
+<tr><td>60%</td><td>41.2</td><td>53.7</td><td>57.8</td><td>86.5</td><td>43.5</td></tr>
+<tr><td>50%</td><td>41.9</td><td>58.8</td><td>62</td><td>88.5</td><td>47.6</td></tr>
+<tr><td>40%</td><td>43.3</td><td>63.3</td><td>66</td><td>90.5</td><td>52.1</td></tr>
+<tr><td>30%</td><td>46.1</td><td>70.2</td><td>71.2</td><td>92.5</td><td>56.5</td></tr>
+<tr><td>20%</td><td>49.2</td><td>77.4</td><td>74.7</td><td>93.7</td><td>61.6</td></tr>
+<tr><td>10%</td><td>60.1</td><td>83.1</td><td>77</td><td>95.4</td><td>68.1</td></tr>
+</tbody></table></div>
+<p>|      |   DPR-BERT NQ |   LM-Prob NQ |   Self-Con NQ |   LM-Prob TriviaQA |   LM-Prob HotpotQA |</p>
+<figcaption>Table 18: Selective prediction results. All numbers represent the accuracy (EM) at the corresponding coverage thresholds. For example, 100% means performance on the entire test set while 10% means the performance on the most confident 10% predictions.</figcaption>
+<div class="tablewrap"><table><thead><tr><th></th><th>DPR-BERT NQ</th><th>LM-Prob NQ</th><th>Self-Con NQ</th></tr></thead><tbody>
+<tr><td>100%</td><td>35</td><td>35</td><td>35</td></tr>
+<tr><td>90%</td><td>37.6</td><td>37.9</td><td>38.2</td></tr>
+<tr><td>80%</td><td>39</td><td>40.8</td><td>42.8</td></tr>
+<tr><td>70%</td><td>40.9</td><td>44.1</td><td>46.1</td></tr>
+<tr><td>60%</td><td>41.6</td><td>47.8</td><td>51.6</td></tr>
+<tr><td>50%</td><td>43.1</td><td>52.9</td><td>55.1</td></tr>
+<tr><td>40%</td><td>44.1</td><td>58</td><td>60.6</td></tr>
+<tr><td>30%</td><td>45.4</td><td>65.3</td><td>63.5</td></tr>
+<tr><td>20%</td><td>49.5</td><td>75.3</td><td>71.5</td></tr>
+<tr><td>10%</td><td>59.2</td><td>82.5</td><td>70.5</td></tr>
+</tbody></table></div>
+<p>|      |   DPR-BERT NQ |   LM-Prob NQ |   Self-Con NQ |</p>
+<figcaption>Table 19: Selective prediction results on a controlled set sampled from the original test set so that the accuracy on the sub-sampled test set is the same.</figcaption>
+<p>提示设计 我们比较了几种提示设计（特别是使用哪种类型的示例样本）。在所有情况下，我们都采样 16 个示例样本用于提示中。</p>
+<p>结果 从表 21 中可以看到，不同的提示给出了截然不同的结果。具体而言，仅在提示中使用原始示例会导致相对较差的成功率（尤其是在 confidence FEVER 上），而在提示中加入编辑后的相关示例虽然能带来更好的成功率，却会使模型即使在无关问题上也过度依赖知识更新。然而，当在提示中同时纳入原始示例、编辑后的相关示例和无关示例这所有情况时，GPT-3 能够实现较高的编辑成功率和较低的无关问题回撤。</p>
+<p>22</p>
+<figure><img src="assets/a488/figures/fig_2.png" alt="" loading="lazy"></figure>
+<div class="tablewrap"><table><thead><tr><th></th><th>Retain</th><th>Update</th><th>Other</th><th>Memorization Ratio</th></tr></thead><tbody>
+<tr><td>NQ with Code-Davinci-002</td><td>NQ with Code-Davinci-002</td><td>NQ with Code-Davinci-002</td><td>NQ with Code-Davinci-002</td><td>NQ with Code-Davinci-002</td></tr>
+<tr><td>T5 (supervised) GPT-3 Prompt 〈 Q, A 〉 GPT-3 Prompt 〈 P, Q, A 〉 GPT-3 Prompt 〈 Q, A&#x27; 〉 GPT-3 Prompt 〈 P&#x27;, Q, A&#x27; 〉</td><td>20% 60.8% 59.1% 10.4% 4.5%</td><td>33% 25.8% 25.4% 56.6% 85.4%</td><td>47% 13.4% 15.5% 32.9% 10.2%</td><td>30% 70.2% 70.0% 15.6% 5.0%</td></tr>
+<tr><td>SQuAD with Code-Davinci-002</td><td>SQuAD with Code-Davinci-002</td><td>SQuAD with Code-Davinci-002</td><td>SQuAD with Code-Davinci-002</td><td>SQuAD with Code-Davinci-002</td></tr>
+<tr><td>GPT-3 Prompt 〈 Q, A 〉 GPT-3 Prompt 〈 P, Q, A 〉 GPT-3 Prompt 〈 Q, A&#x27; 〉 GPT-3 Prompt 〈 P&#x27;, Q, A&#x27; 〉</td><td>58.0% 32.8% 15.4%</td><td>29.1% 52.9% 48.1%</td><td>12.9% 14.3% 36.5% 8.1%</td><td>66.6%</td></tr>
+<tr><td>Text-Davinci-001 (175B) Text-Curie-001 (6.7B)</td><td>7.1% 7.2%</td><td>84.8% 57.9%</td><td>GPT-3 34.9%</td><td>38.2% 24.3% 7.8%</td></tr>
+<tr><td>NQ with different versions of</td><td>NQ with different versions of</td><td>NQ with different versions of</td><td>NQ with different versions of</td><td>NQ with different versions of</td></tr>
+<tr><td></td><td>14.8%</td><td>40.0%</td><td>45.2%</td><td>11.0% 26.9%</td></tr>
+</tbody></table></div>
+<p>|                                                                                                                  | Retain                        | Update                        | Other                         | Memorization Ratio            |</p>
+<figcaption>Figure 2: Reliability diagrams for different calibration setups. x-axis: confidence of each bucket; y-axis: accuracy of each bucket.</figcaption>
+<p>23</p>
+<div class="tablewrap"><table><thead><tr><th>Success Rate (Relevant Paraphrases)</th><th>Success Rate (Relevant Paraphrases)</th><th>Acc. Drawdown (Irrelevant Questions)</th></tr></thead><tbody>
+<tr><td>Prompt: Original Examples Only</td><td>Prompt: Original Examples Only</td><td>Prompt: Original Examples Only</td></tr>
+<tr><td>FEVER</td><td>44.2</td><td>85.1 - 84.9 = 0.2</td></tr>
+<tr><td>zsRE QA</td><td>92.9</td><td>40.0 - 39.7 = 0.3</td></tr>
+<tr><td>Prompt: Original Examples + Edited Relevant Examples</td><td>Prompt: Original Examples + Edited Relevant Examples</td><td>Prompt: Original Examples + Edited Relevant Examples</td></tr>
+<tr><td>FEVER</td><td>100.0</td><td>83.9 - 48.6 = 35.3</td></tr>
+<tr><td>zsRE QA</td><td>99.9</td><td>39.7 - 11.6 = 28.1</td></tr>
+<tr><td>Prompt: Original Examples + Edited Relevant Examples + Edited Irrelevant Examples</td><td>Prompt: Original Examples + Edited Relevant Examples + Edited Irrelevant Examples</td><td>Prompt: Original Examples + Edited Relevant Examples + Edited Irrelevant Examples</td></tr>
+<tr><td>FEVER</td><td>99.9</td><td>84.0 - 83.5 = 0.5</td></tr>
+<tr><td>zsRE QA</td><td>98.8</td><td>40.6 - 40.1 = 0.5</td></tr>
+</tbody></table></div>
+<p>| Success Rate (Relevant Paraphrases)                                               | Success Rate (Relevant Paraphrases)                                               | Acc. Drawdown (Irrelevant Questions)                                              |</p>
+<figcaption>Table 21: Targeted in-context knowledge updating results for FEVER and zsRE. From the last block of results, we see that when using a mixture of all three types of demo examples, GPT-3 is able to achieve very high knowledge edit success rate (99.9% and 98.8%) while incurring minimal drawdown (0.5%) on irrelevant questions.</figcaption>
+<p>24</p></div></div></body></html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM As DBA（用 LLM 充当数据库管理员：D-Bot）</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>LLM As DBA</h1>
+<p class="lead">LLM As DBA（用 LLM 充当数据库管理员：D-Bot）</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">RAG与检索</span><span class="chip">记忆管理</span><span class="chip">提示技术</span><span class="chip">自动提示优化</span><span class="chip">思维链与推理</span><span class="chip">Agent框架</span><span class="chip">工具调用</span><span class="chip">多智能体协作</span><span class="chip">Agent通信协议</span><span class="chip">可靠性与安全</span><span class="chip">人机协作</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a572.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文提出 D-Bot，一个用 LLM 充当数据库管理员（DBA）的框架，针对人工 DBA 培养慢（单一产品文档可超 10,000 页）、人力难以覆盖云上百万级实例、紧急情况响应不及时，以及传统规则/小模型工具无法利用文档、难以泛化的问题。方法分两阶段：准备阶段将文档按章节结构递归分块、用 LLM 生成摘要作为索引，并抽取 name/content/metrics/steps 四字段的结构化经验片段，同时用 LLM 基于约 5 对样本生成候选诊断提示、按评分函数排序选出最佳模板；维护阶段用 BM25/LLM Embeddings/Dense Retrieval 检索工具并生成 API 使用说明，按 tree of thought（UCT 评分、失败回溯）做多步根因推理，并由 Chief DBA、CPU Agent、Memory Agent 等多个 LLM 按角色分工协作诊断。初步实验（双方均用 GPT-4 + PostgreSQL/Prometheus）显示基线 LLM+Metrics 回答合法但成功率很低（&#x27;危险行为&#x27;），D-Bot 同时达到高合法率与高成功率。对团队而言，这是把上下文工程、自动提示优化、工具调用与多智能体协作整合进同一 Agent 系统的代表性工程实践。</p>
+<h2>问题</h2><p>人工 DBA 难以管理大规模数据库实例：培养周期长、数量不足、紧急情况下无法及时响应；传统半自动维护工具基于经验规则或小规模 ML 模型，文本处理能力差、无法利用文档回答基本问题、难以泛化到场景变化，也不能像 DBA 一样基于初步分析递归查找系统视图推理根因。论文目标是构建能从文本资料持续学习维护经验、与数据库交互并及时给出有依据的诊断与优化建议的 LLM-based DBA。</p>
+<h2>方法</h2><p>D-Bot 分两个阶段。准备阶段：(1) 经验抽取——按章节结构分块（超过约 1k token 递归再分），用 LLM 为每块生成摘要作为文本索引，再跨相似块抽取四字段（name/content/metrics/steps）结构化经验片段；(2) 诊断提示生成——用 LLM 基于少量输入输出对（约 5 对）建议候选提示，按自定义评分函数（如根因检出比例）排序，保留 top-10 并选出最佳输入提示模板。维护阶段：(3) 工具学习——用 BM25、LLM Embeddings 或 Dense Retrieval 检索合适工具，并向 LLM 提供所选工具 API 的使用说明；(4) 根因分析——初始化诊断树，用 UCT 评分（含根因检出成功率与选择频率，工具 API 调用失败记 -1）选择节点，模拟执行、对已有节点反思降权、失败时回溯到先前步骤，达到终止条件后输出分析；(5) 协作诊断——Chief DBA、CPU Agent、Memory Agent 三个 LLM Agent 按领域分工，基于预定义环境设定与通信原则（含对工具调用记录的渐进摘要）进行辩论式沟通与并行诊断，用户可在过程中给出指令与反馈。</p>
+<h2>关键结果</h2><p> 论文正文未给出具体量化数值（Table 1 的数值未在正文展示），仅报告定性比较结果</p><p> 初步实验（D-Bot 与基线 llm+Metrics 均部署 GPT-4 + PostgreSQL/Prometheus 指标与视图）：两者合法率都高，但 LLM+Metrics 成功率很低（&#x27;危险行为&#x27;），D-Bot 同时取得高合法率与高成功率</p><p> 案例分析：INSERT_LARGE_DATA 场景中，LLM+Metrics 仅凭 node_procs_running 发现&#x27;运行进程数高&#x27;即提前停止；D-Bot 进一步查询 pg_stat_statements 定位到&#x27;大量 UPDATE/INSERT 操作导致的高内存占用&#x27;</p><p> 案例分析：CORRELATED_SUBQUERY 场景中，LLM+Metrics 将原因错误归因于&#x27;频繁读写与排序大量数据&#x27;；D-Bot 交叉引用抽取的查询优化知识，定位到 correlated-subquery 结构才是性能瓶颈</p><p> D-Bot 借助工具检索组件能给出具体优化建议（如调用查询改写规则、调整 work_mem 参数），而基线只给出&#x27;解决资源竞争&#x27;类泛泛建议</p>
+<h2>创新点</h2><p>相对基于经验规则或小规模 ML 模型的传统半自动维护工具，D-Bot 以 LLM 为中心：直接从文档抽取可复用的结构化维护经验、通过生成并排序候选提示实现诊断任务的自动提示优化、用 tree of thought（UCT）支持失败回溯的根因推理，并提出（论文自称创新概念）多 LLM 按角色分工的协作诊断框架（Chief DBA + 领域 Agent + 辩论式沟通）。与直接用 LLM+指标的朴素用法相比，经验/提示/工具的三重准备阶段显著减少了幻觉与浅层推理导致的错误根因。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.2 提示工程 | 3.3 Agent 架构与工具使用 | 3.4 多智能体协作 | 3.5 评测与可靠使用</p><p><b>理由：</b>该论文直接命中团队多个核心能力域：文档分块+摘要索引+四字段结构化经验片段是典型的上下文组织与记忆实践（3.1）；用 LLM 基于少量样本生成候选提示并按评分函数排序选优属于自动提示优化（3.2）；工具检索（BM25/LLM Embeddings/Dense Retrieval）+ API 使用说明 + tree of thought 失败回溯构成完整的单 Agent 执行可靠性设计（3.3）；Chief DBA/CPU/Memory Agent 的角色分工、通信原则与渐进摘要式记录是多智能体协作的直接案例（3.4）；legal rate 与 success rate 的区分、对&#x27;回答合法但根因错误&#x27;危险行为的分析对团队评测口径设计有直接借鉴，人可随时介入给出反馈也属于人机协作工作流（3.5）。虽然应用场景是数据库运维而非团队的代码/文档/测试场景，但其&#x27;文档→经验→提示→工具→多 Agent 诊断&#x27;的完整工程链路与团队构建研发提效 Agent 的方法论高度同构，各组件均可平移复用。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

@@ -1,0 +1,247 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>面向功能安全的RTL早期FMEDA：将RTL指标与GLS关联以实现精确的架构分析</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Early FMEDA at RTL for Functional Safety: Correlating RTL Metrics to GLS for Accurate Architectural Analysis</h1>
+<p class="lead">面向功能安全的RTL早期FMEDA：将RTL指标与GLS关联以实现精确的架构分析</p>
+<div style="margin-top:10px"><span class="lvl lvl-medium">medium</span><span class="chip">DVCon 2026</span><span class="chip">故障注入</span><span class="chip">安全架构</span><span class="chip">验证自动化</span><span class="chip">EDA工具</span><span class="chip">逻辑综合</span><span class="chip">2.4 设计验证方法论</span><span class="chip">2.7 EDA/验证自动化与 AI 辅助</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/p356.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文针对ISO 26262功能安全FMEDA传统上依赖门级仿真（GLS）与后版图数据、安全评估滞后且网表flatten后难以映射回RTL层次的问题，提出在RTL阶段执行FMEDA的方法学。核心是轻量级综合（lightweight synthesis）：不做完整优化与布局布线，仅提取各RTL模块的cell构成、数字面积与晶体管数，构建层次化FMEDA数据，再配合RTL级故障注入（stuck-at、transient等）自动生成故障列表并分类为Detected/Latent/Residual，闭环更新SPFM/LFM。在集成parity、watchdog、lockstep安全机制的开源RISC-V核与量产Automotive SoC IP上验证：RTL与门级SPFM偏差约6.34%（76.0% vs 71.18%），LFM均达99%，相关系数约ρ=0.93，量产IP在RTL阶段SPFM达96.49%，并声称可减少最高35%的验证工作量。结论是RTL FMEDA可作为门级安全指标的早期可靠预测器，实现shift-left式安全收敛。</p>
+<h2>问题</h2><p>传统FMEDA在设计周期末端基于最终综合网表与门级仿真（GLS）/后版图数据执行：网表为时序优化被flatten，与RTL功能层次的映射丢失，层次重建、故障关联与覆盖率量化高度依赖人工（如在Verdi中手动追溯logic cones），大型SoC常需数周；且发现安全弱点时硬件已定型，只能以软件完整性检查等手段补偿，违背ISO 26262 &#x27;building safety in by design&#x27;的目标。论文要回答的核心问题是：能否在最终综合之前的RTL阶段有意义地量化安全指标（SPFM/LFM/PMHF）与故障可检测性，同时保持与GLS结果的准确性和可追溯性。</p>
+<h2>方法</h2><p>提出RTL-centric FMEDA框架：(1) 轻量级综合将RTL转为结构抽象，提取cell组成、数字面积（µm²）与等效晶体管数，不改变设计、不做完整优化与布局布线；(2) 按RTL层次聚合结构数据，构建层次化FMEDA模型，作为Failure Rate（λ）与Failure Mode估计基线，数据可导出CSV/XML以支持下游自动化；(3) 在RTL级用故障模拟器（如VCZ01X）自动生成故障列表与仿真设置，执行stuck-at-0/1、transient、control-path故障注入，结果分类为Detected/Latent/Residual并回馈FMEDA模型，形成闭环以更新SPFM/LFM，未检测故障可直接追溯到具体RTL模块；(4) 建立RTL与门级FMEDA的定量相关性分析框架，量化综合优化（gate merging、retiming）对指标的影响。实验平台为集成parity、watchdog、lockstep冗余安全机制的开源RISC-V处理器核，以及一个量产Automotive SoC IP。</p>
+<h2>关键结果</h2><p> RTL阶段CPU SPFM为76.0%，综合后门级SPFM降至71.18%，偏差约6.34%，主要由逻辑最小化与资源共享等综合优化导致</p><p> SPFM与LFM在RTL与门级之间高度相关：两种方法的LFM均收敛于99%</p><p> 门级验证后与验证前SPFM比值约0.995（delta约0.4%）；门级验证后SPFM与RTL抽象SPFM的相关系数约ρ=0.93</p><p> 在门级网表上随机注入12,500个stuck-at故障，提取Fsafe（安全故障比例）与DC（故障覆盖率）指标，并与FMEDA推导指标建立定量关联</p><p> 量产Automotive SoC IP在RTL阶段计算得SPFM为96.49%</p><p> 论文声称该方法可将整体验证工作量减少最高35%（reducing overall verification effort by up to 35%）</p><p> RTL与门级的绝对FIT值存在明显差异（主要因综合优化与面积缩减），但PMHF保持一致相关，故障分布与安全机制有效性保持一致</p>
+<h2>创新点</h2><p>区别于在最终综合网表/后版图阶段做FMEDA的传统流程，该方法通过轻量级综合在RTL阶段即建立带结构信息（面积、晶体管数、层次归属）的FMEDA模型，用户全程在RTL环境操作而工具链透明地保持综合感知精度，避免了传统流程中数周的人工层次重建；并给出RTL FMEDA与门级FMEDA的定量相关性框架（ρ≈0.93、LFM均99%），使RTL安全指标成为门级结果的可信预测器，支持早期架构分析、安全机制划分（safety mechanism partitioning）与层次级安全指标评估。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>medium</p><p><b>命中能力域：</b>2.4 设计验证方法学 | 2.7 EDA/验证自动化与 AI 辅助</p><p><b>理由：</b>论文主题是ISO 26262功能安全FMEDA，并非团队存储/互连IP（LPDDR/HBM4/UCIe）的核心交付内容，但其技术手段落在团队能力域内：RTL级故障注入campaign、故障列表自动生成与Detected/Latent/Residual结果分类属于2.4设计验证方法学范畴；轻量级综合结构数据提取、层次化FMEDA自动构建、CSV/XML导出与RTL-GLS相关性自动分析属于2.7验证/EDA自动化范畴。若团队IP进入汽车客户供应链（车规SoC中的存储控制器/互连需满足ASIL要求），该早期安全评估流程具有直接落地价值；否则主要作为故障注入自动化与RTL-门级指标相关性分析的方法参考，故评为medium。</p><p><b>建议动作：</b>作为方法参考存档</p>
+<h2>中文全文</h2><h2>Early FMEDA at RTL for Functional Safety: Correlating RTL Metrics to GLS for Accurate Architectural Analysis</h2>
+<p>Myungkyoon Yim，首席研究员 - 现代汽车韩国（Hyundai Korea）(mk.yim@hyundai.com)</p>
+<p>Vedant Garg，解决方案架构师 - Synopsys 奥斯汀 (vedantg@synopsys.com) Buyong UM，高级研究员 - 现代汽车韩国（Hyundai Korea）(buyong.um@hyundai.com) Kyle Kim，应用工程师 - Synopsys 韩国 (chunsung@synopsys.com) Liz Song，客户管理 - Synopsys 韩国 (jieun@synopsys.com)</p>
+<h2>Abstract</h2>
+<p>按照 ISO 26262 的要求，确保汽车电子系统的功能安全需要在整个硬件生命周期内进行全面的 FMEDA。传统的 FMEDA 方法依赖于门级仿真和布局后数据，限制了早期架构探索和设计优化的机会。本文介绍了一种在寄存器传输级（Register Transfer Level, RTL）进行 FMEDA 的方法，使设计团队能够在开发流程的更早阶段评估安全度量、执行故障注入并分析诊断覆盖率（DC）。在实现之前及早识别单点故障和潜伏故障，使设计人员能够应对安全风险并增强安全机制。[3]</p>
+<p>为验证基于 RTL 的 FMEDA 的准确性，本文提出了一种相关性框架，将 RTL 结果与门级仿真结果进行对齐。该分析展示了早期安全度量与综合后安全度量之间的关系，并突出了逻辑优化和时序效应对诊断覆盖率的影响。该方法支持架构分析、安全机制划分以及层次级安全度量评估。它为设计人员和安全管理人员提供了实用的工具，以实现可靠的早期安全评估和高效的 ISO 26262 合规，其应用可扩展至汽车、航空航天和工业领域。[2] [3]</p>
+<h2>1.1 Motivation</h2>
+<p>确保当今汽车半导体系统的功能安全不仅是一项法规义务，更是一种设计上的必然要求。现代汽车集成了数百个电子控制单元（ECU）和复杂的片上系统（SoC）架构，每一个都需要证明符合 ISO 26262。该标准强调对随机硬件失效的定量评估，这构成了单点故障度量（SPFM）、潜伏故障度量（LFM）以及随机硬件失效概率度量（PMHF）等安全度量的基础。</p>
+<p>传统上，这些度量的定量分析是在设计周期后期使用门级仿真（GLS）或布局后安全分析来执行的。这种方法虽然准确，却会引入显著的限制：</p>
+<p>早期安全可见性的缺失常常导致被动式的设计迭代，即在设计已经进入实现阶段时才发现安全薄弱点。这种被动模式与 ISO 26262 “通过设计内建安全” 的目标相冲突。</p>
+<p>本工作的动机源于一个简单却有力的问题：能否在寄存器传输级（RTL）阶段、远早于最终综合之前，对安全度量和故障可检测性进行有意义的量化，同时保持准确性以及对 GLS 结果的可追溯性？</p>
+<p>如果这种相关性得以建立，工程师便能及早识别安全关键薄弱点，做出数据驱动的架构选择，并大幅缩短达到安全签核所需的时间。</p>
+<h2>1.2 Objectives and Contributions</h2>
+<p>本工作提出了一种以 RTL 为中心的 FMEDA 框架，该框架在设计周期早期即执行故障分析并推导安全度量，同时与门级实现保持结构上的相关性。尽管所有分析与报告均在 RTL 抽象层级进行，该方法学在内部会执行一次快速综合步骤，以提取设计的结构视图。此步骤捕获诸如扇入/扇出锥、时序边界和组合逻辑连接性等门级关系，而无需等待完整的布局布线。其结果是一个混合模型：它为用户保留了 RTL 的可见性，同时融入了足够的结构细节，从而准确表征底层逻辑行为。</p>
+<p>这种混合化使故障位点能够被更精确地映射，并确保在 RTL 层级推导出的诊断覆盖率（DC）、SPFM 和 LFM 度量在数量上可追溯至门级 FMEDA。实际上，最终用户完全在 RTL 环境中执行 FMEDA，而工具链则透明地保持由综合信息支撑的准确性。</p>
+<p>本工作的关键目标与贡献如下：</p>
+<h2>2. Traditional Methodology</h2>
+<p>门级方法学作用于最终综合后的网表，这些网表代表已可流片（tapeout）的设计，其中所有逻辑优化、层次扁平化和时序约束均已应用完毕。尽管该流程能够产生准确的实现后数据，但它显著限制了早期安全性探索与架构优化的灵活性。</p>
+<h2>2.1 Gate-Level Netlist Generation</h2>
+<p>在传统流程中，创建 FMEDA 的起点是最终的门级网表，该网表已完成完整综合与时序收敛。此网表包含由综合与优化工具生成的所有已扁平化的逻辑单元及其互连。</p>
+<p>在此阶段，综合工具会提供每个实例的详细信息，包括其单元类型、层次化名称和数字面积，如表 1 所示。然而，由于设计层次为满足时序和优化需求而被扁平化，这些网表节点与原始寄存器传输级（RTL）层次之间的映射关系实际上已经丢失。尽管这些数据提供了准确的实现度量，但它们是纯扁平的，缺乏与架构意图或功能层次的任何关联。而生成有意义的 FMEDA 的复杂性正是由此开始。</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th></tr></thead><tbody>
+<tr><td>Flattened Node (Netlist)</td><td>Digital_Area (µm²)</td></tr>
+<tr><td>U3254/AOI22_X1</td><td>4.8</td></tr>
+<tr><td>U3255/INV_X2</td><td>1.5</td></tr>
+<tr><td>U3256/NAND3_X1</td><td>3.6</td></tr>
+<tr><td>U3257/BUF_X1</td><td>1.2</td></tr>
+<tr><td>U3258/DFFR_X1</td><td>4.3</td></tr>
+<tr><td>U3259/OR2_X1</td><td>2.4</td></tr>
+</tbody></table></div>
+<p>| 0                        | 1                  |</p>
+<h2>2.2 Generating FMEDA</h2>
+<p>在扁平化的门级环境中，生成 FMEDA 需要人工重构设计层次及其安全关联。每个网表节点都必须追溯回其来源的 RTL 或功能模块，而这可能极具挑战性，因为综合工具可能会重命名或合并信号、移除冗余逻辑，或对寄存器进行重定时。分析人员往往只能求助于人工原理图探查，在 EDA 工具（例如 Verdi）中打开层次化视图，并将逻辑锥与其对应的功能模块进行目视关联。这一过程耗时、易错，且高度依赖工程师对综合变换的理解。</p>
+<p>例如，RTL 中原本位于 top.cpu.alu.reg_status[3] 的寄存器，可能由于重定时或优化而在门级表现为多个分布式触发器（U3258/DFFR_X1、U4110/DFFR_X1）。</p>
+<p>因此，层次重构、故障关联和覆盖率量化变成一个高度依赖人工且反复迭代的过程，对于大型 SoC 而言往往需要数周的工作量。</p>
+<h2>2.3 Validation by Fault Injection</h2>
+<p>一旦FMEDA表格填写完成，便会在门级网表上开展故障注入实验，以验证所实现安全机制的有效性。在此阶段，会对固定0（stuck-at-0）、固定1（stuck-at-1）或瞬态事件等故障进行仿真，以评估安全机制能否检测或缓解这些问题。如果发现诊断缺口，此时再进行硬件修改往往为时已晚，因为该网表代表的是最终可流片（tapeout）的设计。因此，任何未解决的安全弱点都必须在软件或系统层面加以处理，这会增加复杂性，并可能引入性能上的折衷。例如，如果故障注入揭示某条数据总线缺乏奇偶校验保护，硬件修改将需要代价高昂的重新流片（design re-spin）。相反，团队通常被迫实现基于软件的完整性检查或周期性的存储器回读操作，这会增加运行时延迟，并损害硬件驱动安全的目标。这一挑战凸显了早期安全可见性的重要性——而这正是下一节所讨论的基于RTL的FMEDA方法学专门针对的领域。[5]</p>
+<h2>3. RTL FMEDA Methodology</h2>
+<p>所提出的 RTL FMEDA 方法学建立了一个早期的、数据驱动的框架，用于量化安全指标，并利用故障注入验证安全机制。它通过轻量级综合、层次化建模、自动化失效模式分布以及故障注入验证相结合的方式，弥合了 RTL 设计意图与门级实现精度之间的抽象差距。</p>
+<h2>3.1 RTL Abstraction through lightweight quick Synthesis</h2>
+<p>该流程以轻量级综合为核心，这是一种由电子设计自动化（EDA）驱动的过程，将 RTL 转换为由基本单元、触发器和组合逻辑元件构成的结构抽象。与包含优化和布局的完整综合不同，轻量级综合专注于提取关键结构细节，例如每个模块的单元构成、数字面积和晶体管数量，且不改变设计本身，如表 2 所示。这些量化属性构成了 FMEDA 模型的基础，每个</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th><th>2</th></tr></thead><tbody>
+<tr><td>Cell_Type</td><td>Digital_Area (µm²)</td><td>Transistor Count</td></tr>
+<tr><td>DFF_X1</td><td>4.2</td><td>20</td></tr>
+<tr><td>NAND2_X1</td><td>2.5</td><td>10</td></tr>
+<tr><td>NOR3_X2</td><td>3.8</td><td>14</td></tr>
+<tr><td>INV_X1</td><td>1.1</td><td>6</td></tr>
+<tr><td>XOR2_X1</td><td>3.2</td><td>12</td></tr>
+<tr><td>AOI21_X2</td><td>4.5</td><td>16</td></tr>
+</tbody></table></div>
+<p>| 0         | 1                  | 2                |</p>
+<figcaption>Table 2: 从我们的方法论中提取的结构数据</figcaption>
+<p>单元均标注其数字面积（单位为 µm²）和等效晶体管数量，从而能够对硬件失效概率进行精确缩放。这种方法在将分析保持在 RTL 层级的同时，保持了对实现细节的感知。所得数据能够以 CSV 或 XML 格式导出，从而简化下游自动化流程，并将这些指标映射到 RTL 层次结构中。[4]</p>
+<h2>3.2 Creating RTL Hierarchy Based FMEDA Data</h2>
+<p>一旦结构数据可用，每个 RTL 块或子块即被建模为一个包含其各自单元组成的层次化节点。轻量级综合数据按层次结构进行聚合，对所有组成单元的数字面积或晶体管数量进行求和。从数学上讲，每个 RTL 模块 M 的累积度量可表示为：</p>
+<p>其中 N ᵢ 表示单元类型 i 在层次结构中出现的次数，A ᵢ 表示其对应的数字面积或晶体管数量。该过程使得能够在整个设计层次结构上构建定量的 FMEDA 视图，如下方表 3 所示：</p>
+<div class="tablewrap"><table><thead><tr><th>RTL_Hierarchy</th><th>Total_Cells</th><th>Aggregated_Area (µm²)</th><th>Total_Transistors</th></tr></thead><tbody>
+<tr><td>top.cpu.alu</td><td>22,450</td><td>65,800</td><td>290,000</td></tr>
+<tr><td>top.cpu.decoder</td><td>11,320</td><td>34,200</td><td>155,000</td></tr>
+<tr><td>top.memory.controller</td><td>14,970</td><td>42,750</td><td>195,000</td></tr>
+<tr><td>top.io.interface</td><td>8,540</td><td>21,900</td><td>99,800</td></tr>
+</tbody></table></div>
+<p>| RTL_Hierarchy         |   Total_Cells |   Aggregated_Area (µm²) |   Total_Transistors |</p>
+<figcaption>Table 3: 基于RTL层次结构的FMEDA数据</figcaption>
+<p>这种聚合确保每个 RTL 块都具有可量化的硬件复杂度表示，为失效率（λ）和失效模式（FM）的估算奠定了基线。[3] [4]</p>
+<h2>3.3 Validation through Fault Injection</h2>
+<p>为了验证 FMEDA 假设以及安全机制的覆盖率，对由层次化 FMEDA 模型识别出的安全相关失效模式进行故障注入。每个注入的故障——例如固定 1/0（stuck-at-1/0）故障、瞬态故障或控制路径失效——都模拟真实的硬件缺陷，从而能够评估系统安全机制检测或缓解这些故障的能力。验证流程包括自动生成故障列表和仿真设置、使用故障仿真器（如 VCZ01X）在 RTL 层级执行注入活动，以及对结果进行记录并分类为已检测（Detected）、潜伏（Latent）或残余（Residual）故障。</p>
+<p>故障注入的结果被反馈到 FMEDA 模型中，以细化检测覆盖率并更新单点故障度量（SPFM）和潜伏故障度量（LFM）指标。这种闭环方法支持有针对性的架构反馈，可将未检测到的故障直接追溯到特定的 RTL 模块，从而在设计早期对安全机制加以改进。因此，该方法支持持续的安全增强，将架构分析与验证收敛衔接起来。通过将传统的综合后安全分析转变为早期的迭代过程，RTL FMEDA 方法利用基于综合的快速结构映射、层次化 FMEDA 生成、均匀失效分布以及 RTL 层级的故障注入，同时兼顾了速度与可追溯性。这使得团队能够在门级实现之前很早的阶段，就按照 ISO 26262 的要求验证诊断覆盖率（DC）和安全指标，从而显著降低代价高昂的后期设计变更的可能性。</p>
+<h2>4. Correlation between RTL FMEDA and Traditional FMEDA</h2>
+<p>为了评估基于 RTL 的 FMEDA 的准确性，我们将其结果与在最终综合网表上执行的传统门级 FMEDA 进行了定量比较。该比较旨在评估由 RTL 推导出的安全指标对综合后可靠性与覆盖率的预测能力。</p>
+<p>所选 IP 模块的总体失效率（Failure In Time, FIT）与随机硬件失效概率度量（Probabilistic Metric for Random Hardware Failures, PMHF）汇总如下。尽管主要由于综合优化和面积缩减，RTL 分析与门级分析之间的绝对 FIT 值存在明显差异，但 PMHF 始终保持一致的相关性。这些差异主要归因于综合过程中的逻辑优化，例如门合并与重定时，它们降低了晶体管数量，进而降低了门级的净失效率。重要的是，故障分布和安全机制的有效性保持一致，这证实了早期基于 RTL 的 FIT 估算能够可靠地预测总体可靠性趋势。如图 1 所示，单点故障度量（SPFM）和潜伏故障度量（LFM）也表现出强相关性。RTL FMEDA 报告的 SPFM 为 76.0%，而门级 FMEDA 测得的 SPFM 为 71.18%，偏差约为 6.34%。两种方法在 99% 的 LFM 上收敛，表明在识别潜伏故障路径方面具有极佳的一致性。</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th></tr></thead><tbody>
+<tr><td>Metric</td><td>FIT (Failures in Time)</td><td>PMHF (FIT)</td><td>SPFM (%)</td><td>LFM (%)</td></tr>
+<tr><td>RTL FMEDA</td><td>0.1805</td><td>0.07821</td><td>76.0</td><td>99.0</td></tr>
+<tr><td>Gate- Level FMEDA</td><td>0.09933</td><td>0.06012</td><td>71.18</td><td>99.0</td></tr>
+<tr><td>Delta</td><td>0.08117</td><td>0.01809</td><td>6.34%</td><td>0.0%</td></tr>
+</tbody></table></div>
+<p>| 0                 | 1                      | 2          | 3        | 4       |</p>
+<figure><img src="assets/p356/figures/fig_1.png" alt="Figure 1: RTL与门级FMEDA之间安全指标的比较" loading="lazy"></figure>
+<figcaption>Figure 1: RTL与门级FMEDA之间安全指标的比较</figcaption>
+<p>这些结果验证了在 RTL 阶段评估的架构级故障覆盖率在综合过程中基本得以保持，而较小的 SPFM 差异主要是由门级仿真期间影响校验器激活窗口的少量时序驱动变更所引起的。</p>
+<p>该分析表明，RTL FMEDA 具有很强的可靠性预测能力：尽管综合引入了面积和逻辑上的缩减，它仍能以极小的偏差准确估算 SPFM 和 LFM 等综合后安全指标。通过保留设计层次结构，RTL 流程确保了安全机制到其各自逻辑块的清晰架构可追溯性，与门级方法相比，大幅简化了因果分析，并缩短了 FMEDA 的搭建与调试时间。最值得注意的是，RTL 与门级安全指标之间的强相关性证实，RTL FMEDA 能够有效提供早期安全收敛，从而在初步安全认证中替代后期门级仿真，实现更早的设计收敛，并将总体验证工作量减少多达 35%。尽管绝对 FIT 和 PMHF 值会随具体实现而变化，但在 RTL 阶段推导得到的一致且可追溯的诊断覆盖率指标证实了它是一种稳健且高效的早期方法学，可用于 ISO 26262 下安全关键 IP 的评估。</p>
+<h2>5.1 RISCV Open Core (For model)</h2>
+<figure><img src="assets/p356/figures/fig_2.png" alt="" loading="lazy"></figure>
+<div class="tablewrap"><table><thead><tr><th>Simple Hierarchy Name</th><th>Digital_Area</th></tr></thead><tbody>
+<tr><td>or1200_alu</td><td>8580</td></tr>
+<tr><td>or1200_rf/rf_a</td><td>7413</td></tr>
+<tr><td>or1200_mult_mac/or1200_gmultp2_...</td><td>3971</td></tr>
+<tr><td>or1200_sprs</td><td>2875</td></tr>
+<tr><td>or1200_except</td><td>2765</td></tr>
+<tr><td>or1200_mult_mac</td><td>2677</td></tr>
+<tr><td>or1200_genpc</td><td>1850</td></tr>
+<tr><td>or1200_ctrl</td><td>1153</td></tr>
+<tr><td>or1200_operandmuxes</td><td>768</td></tr>
+<tr><td>or1200_wbmux</td><td>761</td></tr>
+<tr><td>or1200_if</td><td>590</td></tr>
+<tr><td>top</td><td>499</td></tr>
+</tbody></table></div>
+<p>| Simple Hierarchy Name              |   Digital_Area |</p>
+<figcaption>Figure 2: 包含建模SM的CPU框图</figcaption>
+<p>400 00</p>
+<p>在实验中，我们选择了一个开源的 RISC-V 处理器内核作为测试平台。如图 2 所示，我们在寄存器传输级（RTL）的各个功能模块中实现了包括奇偶校验、看门狗定时器和锁步冗余在内的安全机制，以评估它们对早期安全指标的影响。这些相同的安全机制被以一致的方式集成到门级网表中，从而能够在 RTL 结果与门级结果之间进行直接比较。此外，我们还开发了一个软件测试库，并将其应用于两个抽象层级，以便于检测特定的失效模式。</p>
+<figure><img src="assets/p356/figures/fig_3.png" alt="Figure 4: RTL整体安全指标，显示CPU SPFM为76%" loading="lazy"></figure>
+<figcaption>Figure 4: RTL整体安全指标，显示CPU SPFM为76%</figcaption>
+<p>如图 3 所示，在 RTL 阶段，我们进行了轻量级综合，以提取模块边界和数字面积等层次化数据，这些数据被用于构建 FMEDA。我们的初步分析表明，</p>
+<p>CPU 模块的单点故障度量（SPFM）达到了 76%，表明其具备稳健的诊断覆盖率（DC），如图 4 所示。在实现修改后的 RTL 设计并运行综合之后，逻辑最小化和资源共享等优化技术降低了大多数模块的数字面积，如图 5 所示。这一减小导致了安全指标的变化；具体而言，综合后 CPU 内核的 SPFM 降至 71.18%，与 RTL 估计值相比降低了 6.34%，如图 6 所示。这一差异凸显了综合优化对诊断覆盖率的影响，以及在 RTL 与门级安全评估之间建立关联的必要性。</p>
+<figure><img src="assets/p356/figures/fig_4.png" alt="Figure 5: 包含数字面积的门级层次结构" loading="lazy"></figure>
+<figcaption>Figure 5: 包含数字面积的门级层次结构</figcaption>
+<figure><img src="assets/p356/figures/fig_5.png" alt="Figure 6: 门级整体安全指标，显示CPU SPFM为71.18%" loading="lazy"></figure>
+<figcaption>Figure 6: 门级整体安全指标，显示CPU SPFM为71.18%</figcaption>
+<p>为了验证我们的发现，我们在门级网表上进行了故障注入实验。一个由 12,500 个固定型故障（stuck-at fault）组成的随机样本集被随机注入到各个模块中，并在验证前与验证后两个阶段对结果进行了分析。所获得的关键指标包括 Fsafe（表示被判定为安全的故障所占比例）和 DC（表示故障覆盖率），如图 7 所示。通过将综合后由 FMEDA 推导的安全指标与实际故障注入结果进行比较，我们在门级 FMEDA 与早期 RTL 推导的指标之间建立了定量关联，如表 4 所示。这一对比分析证明了在整个设计流程中进行早期安全评估和持续验证的重要性。</p>
+<figure><img src="assets/p356/figures/fig_6.png" alt="Figure 7: 网表上的故障注入结果" loading="lazy"></figure>
+<figcaption>Figure 7: 网表上的故障注入结果</figcaption>
+<div class="tablewrap"><table><thead><tr><th>Metric</th><th>RTL Abstraction (Proposed)</th><th>GLS w/o verification (Traditional Est)</th><th>GLS w Verification (Traditional Actual)</th><th>Correlation Est (Traditional Est vs Traditional Actual)</th><th>Correlation Actual (Traditional Actual vs Proposed)</th><th>Overall Prediction Accuracy</th></tr></thead><tbody>
+<tr><td>SPFM</td><td>76%</td><td>71.18%</td><td>70.78% (With Fsafe)</td><td>70.78 / 71.18 = 0.995 (99.5%)</td><td>70.78 / 76 = 0.932 (93.2%)</td><td>(99.5+93.2) /2 = 96.35%</td></tr>
+<tr><td>LFM</td><td>99%</td><td>99%</td><td>-</td><td>-</td><td>-</td><td>100%</td></tr>
+</tbody></table></div>
+<p>| Metric   | RTL Abstraction (Proposed)   | GLS w/o verification (Traditional Est)   | GLS w Verification (Traditional Actual)   | Correlation Est (Traditional Est vs Traditional Actual)   | Correlation Actual (Traditional Actual vs Proposed)   | Overall Prediction Accuracy   |</p>
+<figcaption>Table 4: RTL与GATE的相关性及验证结果（验证前与验证后）</figcaption>
+<h2>5.2 Automotive SoC (Actual)</h2>
+<p>在本案例研究中，我们聚焦于汽车片上系统（SoC）产品组合中一个具有代表性的 IP 模块。为了获得有意义的洞察，我们进行了轻量级综合，从而能够提取详细的层次化抽象数据。这些数据构成了构建失效模式、影响与诊断分析（FMEDA）的基础。图 8 是 RTL 抽象的一个形象化示例，示例中展示的是 GPIO 模块。</p>
+<p>图 9 展示了基于 RTL 数据构建的 FMEDA 的早期中间结果。由于该 IP 目前已处于量产阶段，我们预计会存在一定的偏差。作为评估的一部分，我们计算了该 IP 的单点故障度量（SPFM）。结果显示 SPFM 为 96.49%，表明在 RTL 阶段即具备较高的诊断覆盖率。[5]</p>
+<div class="tablewrap"><table><thead><tr><th>simpie Uiararchv Name</th><th>Digital_Area</th></tr></thead><tbody>
+<tr><td>iomux_aud_top/iomux_aud_sfr</td><td>3202</td></tr>
+<tr><td>iomux_aud_top/iomux_aud</td><td>1173</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio0</td><td>477</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio10</td><td>477</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio11</td><td>477</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio12</td><td>477</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio13</td><td>477</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio14</td><td>477</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio15</td><td>477</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio1</td><td>477</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio2</td><td>477</td></tr>
+<tr><td>iomux_aud_top/iomon_aud_gpio3</td><td>477</td></tr>
+</tbody></table></div>
+<p>| simpie Uiararchv Name          |   Digital_Area |</p>
+<figcaption>Figure 8: 包含数字面积的汽车SoC RTL抽象</figcaption>
+<p>这一发现凸显了我们设计的稳健性及其对安全关键汽车应用的适用性。</p>
+<figure><img src="assets/p356/figures/fig_7.png" alt="" loading="lazy"></figure>
+<div class="tablewrap"><table><thead><tr><th>Name</th><th>Name</th><th>SPFM</th><th>LFM</th><th>PMHF</th><th>Nerrlemion PMHr</th><th>FD</th><th></th><th></th><th></th><th>Anse</th><th>In-use</th><th>λ</th></tr></thead><tbody>
+<tr><td></td><td>IPDEV</td><td>96.49%</td><td></td><td>0.009587</td><td>100.00%</td><td>100.00%</td><td>4.008E·01</td><td>2.382E-02</td><td>0.09252</td><td>1.371E-02</td><td>72.37%</td><td>0.003787</td></tr>
+<tr><td></td><td>DMA_Wrapper</td><td>100.00%</td><td></td><td>8.858e-05</td><td>0.92%</td><td>13.90%</td><td>5.572E-02</td><td>4.589E-03</td><td>0.01885</td><td>0.000E+00</td><td>NaN%</td><td>0</td></tr>
+<tr><td></td><td>GPIO_Controller</td><td>94.33%</td><td></td><td>0.006284</td><td>65.55%</td><td>21.80%</td><td>8.737E-02</td><td>1.923E-02</td><td>0.06683</td><td>1.371E-02</td><td>72.37%</td><td>0.003787</td></tr>
+<tr><td></td><td>OTP_Wrapper</td><td>NaN%</td><td></td><td>0</td><td>0.00%</td><td>0.00%</td><td>0.000E+00</td><td>0.000E+00</td><td>0</td><td>0.000E+00</td><td>NaN%</td><td>0</td></tr>
+<tr><td></td><td>PWM</td><td>NaN%</td><td></td><td>0</td><td>0.00%</td><td>62.45%</td><td>2.503E-01</td><td>0.000E+00</td><td>0</td><td>0.000€+00</td><td>NaN%</td><td>0</td></tr>
+<tr><td></td><td>Top_FCCU</td><td>100.00%</td><td></td><td>0.003214</td><td>33.53%</td><td>1.85%</td><td>7.405E-03</td><td>3 0.000E+00</td><td></td><td>6.839€-030.000€+00</td><td>NaN%</td><td>0</td></tr>
+</tbody></table></div>
+<p>| Name   | Name            | SPFM    | LFM   |      PMHF | Nerrlemion PMHr   | FD      |           |             |         | Anse               | In-use   |        λ |</p>
+<figcaption>Figure 9: 汽车SoC - IP安全指标视图，SPFM为96.49%</figcaption>
+<h2>5.3 Correlation Analysis</h2>
+<p>通过计算门级验证后与验证前单点故障度量（SPFM）的比值，可以衡量 SPFM 值在各设计阶段之间的一致性。在本研究中，该比值约为 0.995，表明门级 FMEDA 所预测的诊断覆盖率与通过故障注入验证的实际覆盖率之间高度吻合。这两个阶段之间的差异极小，差值仅为 0.4%。</p>
+<p>此外，将门级验证后的 SPFM 与 RTL 抽象层的 SPFM 进行比较，得到的相关系数比约为 ρ = 0.93。这表明经过综合与实现优化后，诊断覆盖率仅略有下降。SPFM 在所有设计阶段均表现出强相关性，证实了在 RTL 层建模的硬件和软件安全机制在综合过程中得到了有效保留。类似地，由 FMEDA 计算得到的潜在故障度量（LFM）在 RTL 与门级结果之间也表现出稳健的一致性。这些结果验证了 RTL FMEDA 作为最终安全性能可靠预测器的价值，使设计团队能够在早期即对诊断覆盖率和故障分类建立信心，从而在物理实现之前将不确定性降至最低，如下方表 5 所示。</p>
+<div class="tablewrap"><table><thead><tr><th>Comparison Stage</th><th>SPFM Ratio ( ρ )</th><th>Delta (%)</th><th>Interpretation</th></tr></thead><tbody>
+<tr><td>Correlation Est (Traditional Est vs Traditional Actual)</td><td>0.995</td><td>0.4%</td><td>High consistency between FMEDA and fault injection</td></tr>
+<tr><td>Correlation Actual (Traditional Actual vs Proposed)</td><td>0.93</td><td>7%</td><td>Slight decrease after synthesis and optimizations</td></tr>
+</tbody></table></div>
+<p>| Comparison Stage                                        |   SPFM Ratio ( ρ ) | Delta (%)   | Interpretation                                     |</p>
+<figcaption>Table 5: 各设计阶段的SPFM相关性比率</figcaption>
+<h2>6. Conclusion</h2><h2>证据核查</h2><p class='muted'>1 条证据未在原文中核对到</p></div></div></body></html>

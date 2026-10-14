@@ -1,0 +1,187 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strix：从系统视角重新思考NPU可靠性</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Strix: Re-Thinking NPU Reliability from a System Perspective</h1>
+<p class="lead">Strix：从系统视角重新思考NPU可靠性</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">DAC 2026</span><span class="chip">安全机制</span><span class="chip">诊断覆盖率</span><span class="chip">故障注入</span><span class="chip">功能安全标准</span><span class="chip">安全验证</span><span class="chip">故障诊断</span><span class="chip">在线与在役测试</span><span class="chip">基于arXiv版本</span><span class="chip">2.5 功能安全与安全机制</span><span class="chip">2.6 Fault simulation/ZOIX/TFMEA</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/p029.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文针对DNN/LLM加速器在安全关键部署中日益突出的硬件故障问题：现有方案或把NPU当作整体用TMR粗粒度冗余（减速1.83×–3.68×），或只保护单一部件，无法满足ISO-26262类标准的系统级错误检测要求。Strix提出&#x27;先分析、精准防护&#x27;的全栈可靠性框架，沿NPU推理流水线将其重新划分为寄存器、local memory、systolic array和非线性算子四类模块，通过故障注入刻画失效模式，并分别配置SEC-DED ECC、基于guardpad/guardlinker的行列checksum、ABFT式shield group和代数不变量/TMR等针对性安全机制，辅以ISA扩展与流水线编排隐藏开销。在基于开源Gemmini的20节点FPGA集群与TSMC 28nm综合评估中，Strix几何平均减速仅1.04×，检测覆盖率最高超99%、纠正覆盖率超95%，检测延迟亚微秒，工业规模配置面积/功耗开销仅8.7%/16.8%，全面优于TMR、IR与SOTA方案ReaLM。</p>
+<h2>问题</h2><p>DNN/LLM在安全关键领域（如自动驾驶）大规模依赖NPU加速器，工艺缩放与模型复杂度增长使硬件故障更频繁，单个位错误可经数据复用污染多层激活；现有算法级/指令级/微架构级方案缺乏端到端保证且不满足安全标准的系统级错误检测要求，而系统级TMR开销过高不可部署。论文要解决的问题是：如何在严格性能/面积预算内，对NPU建立满足安全标准诊断要求、可端到端验证的高覆盖率、低减速可靠性保护。</p>
+<h2>方法</h2><p>提出&#x27;analyse-first, protect-exactly&#x27;的全栈框架Strix：先通过故障注入分析DNN/LLM在不同错误率与位位置的容错特性（尾数位不敏感、符号/指数位敏感），沿推理流水线把NPU划分为寄存器、local memory、systolic array、非线性算子四类关键模块并归纳失效模式；再按模块定制安全机制——关键寄存器用轻量SEC-DED ECC，local memory用guardpad/guardlinker实现的行列双向量checksum检测与纠正机制，systolic array用与阵列完全解耦、并行流水执行的ABFT式shield group，非线性算子用代数不变量校验或冗余副本；并通过ISA扩展（precompute子指令、mvout_error_block）与四段流水线/shield并行度配置，把防护延迟隐藏在阵列执行窗口内，形成故障定位、检测与纠正的分层机制。</p>
+<h2>关键结果</h2><p> 性能：Strix减速范围为1.02×–1.07×，几何平均1.04×，优于TMR（1.83×–3.68×）、IR（1.13×–1.95×）和ReaLM（1.22×–1.59×）</p><p> 检测覆盖率：INT8-D与INT8-I超过99%；FP32-D与BF16-I在非极端故障率（≤10^-6）下超过97%</p><p> 纠正覆盖率：典型故障率（≤10^-6）下四种配置均超过95%</p><p> 最坏情况错误检测延迟保持在亚微秒以内（500MHz下测量）；Strix新增组件最高频率高于原Gemmini，关键路径仍由原NPU决定</p><p> 硬件开销（TSMC 28nm、Design Compiler v2019.12）：INT8-I面积8.7%/功耗16.8%，INT8-D面积20.7%/功耗23.2%，FP32-D面积10.2%/功耗21.3%；新增面积主要来自guardpad与guard operators</p><p> 故障敏感性分析：尾数位错误几乎不影响模型性能；LLM对BF16最高4位、多数DNN对FP32最高9位（符号/指数位）高度敏感</p>
+<h2>创新点</h2><p>与将NPU视为整体做TMR粗粒度冗余、或仅保护单一部件/单一故障模型的已有工作不同，Strix以系统视角沿推理流水线重新划分NPU，按各模块失效模式差异化配置安全机制，并通过ISA扩展与流水线/并行度编排将防护延迟隐藏于正常执行；与检测-only、依赖回滚的ReaLM不同，其shield group与systolic array完全解耦、并行执行且支持纠错，可应对永久故障，并通过guardlinker中的error block记录故障位置（如memory地址与tile）辅助永久故障定位。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>2.5 功能安全与安全机制 | 2.6 Fault simulation/Z01X/TFMEA</p><p><b>理由：</b>论文直接命中2.5与2.6两个能力域的核心技术：面向ISO-26262类安全标准的系统级错误检测要求，先做failure mode分析（寄存器/local memory/systolic array/非线性算子四类）再差异化设计安全机制（SEC-DED ECC、checksum、ABFT、TMR），并量化检测/纠正覆盖率与检测延迟，属于典型的安全机制设计与diagnostic coverage论证；其验证方法正是基于功能workload（DNN/LLM推理）的故障注入与fault grading，覆盖瞬态/永久故障、位位置敏感性与detectability分析，与团队基于功能stimulus的fault injection、fault grading及FuSa TFMEA/FMEDA论证高度同构。局限在于对象是NPU计算部件而非团队的存储/互连IP，具体机制（ABFT、矩阵checksum）不能直接移植，但&#x27;先分析失效模式、再精准配置防护、用功能故障注入支撑覆盖率论证&#x27;的方法论与论证范式可直接借鉴。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2604.10484v1  [cs.AR]  2026年4月12日</p>
+<h2>Strix: Re-thinking NPU Reliability from a System Perspective</h2>
+<p>Jiapeng Guan † 、Jie Zhang § 、Hao Zhou † 、Ran Wei ‡ 、Dean You § 、Hui Wang § 、Yingquan Wang † 、Tinglue Wang § 、</p>
+<p>Xudong Zhao † 、Jing Li ¶ 和 Zhe Jiang §∗</p>
+<p>† 大连理工大学，中国。§ 东南大学，中国。‡ 兰卡斯特大学，英国。¶ 新泽西理工学院，美国。</p>
+<h2>Abstract</h2>
+<p>深度神经网络（DNN）和大语言模型（LLM）日益依赖硬件加速器，在安全关键领域亦是如此；与此同时，工艺微缩与模型复杂度的不断增长使硬件故障愈发频繁。现有的系统级机制通常将神经网络处理器（NPU）视为一个整体单元，采用粗粒度复制，带来难以承受的性能与硬件开销，导致可靠性需求与可部署方案之间存在差距。为弥合这一差距，我们提出了 Strix——一个构建于开源片上系统（SoC）之上的全栈 NPU 可靠性框架，涵盖微架构、指令集架构（ISA）与编程方法。Strix 沿系统推理流水线对 NPU 进行重新划分，识别主导失效模式，并附加针对性的安全防护措施，以仅 1.04 × 的性能下降和极小的硬件开销，实现亚微秒级的故障定位、错误检测与纠正。</p>
+<h2>1 Introduction</h2>
+<p>深度神经网络（DNN）与大语言模型（LLM）能够提供最先进（SOTA）的精度，但计算代价高昂 [4]。现代模型的参数量达数十亿乃至数万亿，每次推理需执行数量级更多的乘累加（MAC）运算 [22, 36]，这促使 SoC 为加速器（如 NPU 和 GPU）分配大量芯片面积 [11, 37]。在安全关键部署（例如自动驾驶 [14, 39]）中，加之有如此多的硬件参与其中，可靠性必须被重新审视 [9, 43]。仅依靠固有的容错能力是不够的 [43]；例如，[39] 报告了一例由于 NPU 中的故障导致卡车被误分类为鸟的案例。此类失效正变得愈发可能：规模不断增大的模型加宽了位级故障在时间/空间上的暴露面 [22, 36]，器件缩放提高了对偏差、辐射和老化效应的脆弱性 [7]，而 NPU 中密集的数据复用则使单个错误能够污染跨多个层的众多激活值 [8, 16]。现有工作。有关 NPU 可靠性的研究可以按不同的体系结构层次加以组织。在算法层面，常见方法包括在训练期间注入故障以增强神经元的鲁棒性 [13, 64]、采用投票机制来减轻位翻转的影响 [20]，或修改激活函数以抑制错误传播 [6, 25]。然而，这些方法并不能提供直接的错误检测，其跨模型的可扩展性也存在争议。在指令层面，研究者依赖指令（或代码）冗余（IR）来保护敏感层 [28, 29, 50, 60]；然而这类方法通常需要逐层分析和手动修改代码，并且由于冗余执行而带来可观的性能开销。在微体系结构层面，大多数研究只关注单一部件，例如处理单元（PE）[32, 42, 55, 62]，或单一故障模型（如瞬态故障 [39, 44]）。这种局部化的视角阻碍了对系统级数据流与时序耦合的统一刻画，忽视了各局部机制在缓冲与时序方面的交互效应，最终无法提供端到端的可靠性保证。此外，上述方法无法满足安全标准（如 ISO-26262 [31]）所强制要求的系统级错误检测。要实现系统级保护，仍然依赖于代价高昂的三模冗余（TMR）[41, 51, 61]。尽管 TMR 提供了全面的覆盖，但其粗粒度的全系统分析与保护会带来极高的开销，使其在许多部署场景中并不实用。研究挑战。因此，要真正实现一种既满足安全标准的诊断要求、又能提供端到端可验证可靠性的可靠 NPU 方案，我们必须采用系统级视角，将模型、硬件与运行时整合到一个统一的优化空间中。然而，由于跨层耦合与资源约束，这极具挑战性。一个实用且可部署的方案必须：(i) 准确刻画系统内潜在的失效模式——既要避免过细的粒度（例如逐一分析各个 ALU，导致组合爆炸），也要避免过粗的粒度（例如将整个 NPU 视为一个整体单元，从而降低资源利用率）；以及 (ii) 实施有针对性的缓解策略；这反过来又要求深入理解神经网络的层次结构与数据敏感性，以及 NPU 的微体系结构运行方式。总而言之，只有采用一种将模型行为与硬件故障模式整合进统一分析框架的系统视角，并在各关键子系统之间进行协同编排、施加定制化的加固措施，我们才能在严格的预算内实现满足安全标准的高覆盖率、低性能下降的保证。</p>
+<p>∗ 通讯作者：Zhe Jiang。Email：zhejiang.uk@gmail.com。</p>
+<p>贡献。秉持“先分析、精准防护”（analyse-first, protect-exactly）的理念，我们提出了 Strix——一个面向 NPU 的全栈可靠性框架。Strix 通过协同设计的 SoC 架构、ISA 扩展与编程方法，应对寄存器、本地存储器、脉动阵列和非线性算子等关键组件的多样化失效模式。它建立了层次化的故障定位、错误检测与纠正机制，并辅以流水线与配置策略来最小化系统开销。实验结果表明，Strix 将性能损失保持在 1.07× 以下，优于三模冗余（TMR）（1.83× 至 3.68×）、IR（1.13× 至 1.95×）以及 ReaLM [62]（一种最先进（SOTA）方案，1.22× 至 1.59×）。在典型故障率（即 &lt; 10⁻⁶）下，Strix 可缓解神经网络中的性能下降。在工业规模配置下，Strix 仅引入 8.7% 的面积开销与 16.8% 的功耗开销，为安全关键应用提供了高可靠且高性价比的解决方案。</p>
+<h2>2 Motivations</h2>
+<p>我们首先分析神经网络处理单元（NPU）工作负载的容错能力，以识别任务级脆弱点并指导安全防护机制的部署位置。为此，我们针对分类任务重新训练了若干深度神经网络（DNN）模型，并选取了若干用于语言预测的预训练大语言模型（LLM）。随后，我们使用 [48] 中的框架进行错误注入。考虑到 FP32 和 INT8 在 DNN 中的广泛采用 [10, 34]，以及 BF16 和 INT8 在 LLM 中的兼容性 [3, 65]，我们对所有这些数据表示格式进行了评估。最后，在对 NPU</p>
+<p>Conference&#x27;17，美国华盛顿特区 2026。ACM ISBN 978-x-xxxx-xxxx-x/YYYY/MM</p>
+<p>https://doi.org/10.1145/nnnnnnn.nnnnnnn</p>
+<figure><img src="assets/p029/figures/fig_1.png" alt="5 ´ 10 -11 1 ´ 10 -10 5 ´ 10 -10 1 ´ 10 -9 5 ´ 10 -9 1 ´ 10 -8 5 ´ 10 -8 5 ´ 10 -11 1 ´ 10 -10 5 ´ 10 -10 1 ´ 10 -9 5 ´ 10 -9 1 ´ 10 -8 5 ´ 10 -8 5 ´ 10 -11 1 ´ 10 -10 5 ´ 10 -10 1 ´ 10 -9 5 ´ 10 -9 1 ´ 10 -8 5 ´ 10 -8 5 ´ 10 -11 1 ´ 10 -10 5 ´ 10 -10 1 ´ 10 -9 5 ´ 10 -9 1 ´ 10 -8 5 ´ 10 -8 1 ´ 10 -10 Figure 1. 不同模型 [19, 24, 26, 27, 33, 36, 38, 52, 54, 57] 在不同错误率和位位置下的性能。BERT 模型在 DBPedia-14 数据集 [47] 上测试，其他 DNN 在 Tiny ImageNet 数据集 [63] 上测试，LLM 在 LAMBADA 数据集 [45] 上评估。" loading="lazy"></figure>
+<figcaption>5 ´ 10 -11 1 ´ 10 -10 5 ´ 10 -10 1 ´ 10 -9 5 ´ 10 -9 1 ´ 10 -8 5 ´ 10 -8 5 ´ 10 -11 1 ´ 10 -10 5 ´ 10 -10 1 ´ 10 -9 5 ´ 10 -9 1 ´ 10 -8 5 ´ 10 -8 5 ´ 10 -11 1 ´ 10 -10 5 ´ 10 -10 1 ´ 10 -9 5 ´ 10 -9 1 ´ 10 -8 5 ´ 10 -8 5 ´ 10 -11 1 ´ 10 -10 5 ´ 10 -10 1 ´ 10 -9 5 ´ 10 -9 1 ´ 10 -8 5 ´ 10 -8 1 ´ 10 -10 Figure 1. 不同模型 [19, 24, 26, 27, 33, 36, 38, 52, 54, 57] 在不同错误率和位位置下的性能。BERT 模型在 DBPedia-14 数据集 [47] 上测试，其他 DNN 在 Tiny ImageNet 数据集 [63] 上测试，LLM 在 LAMBADA 数据集 [45] 上评估。</figcaption>
+<p>流水线进行分析的指导下，我们从可靠性视角将 NPU 划分为四个关键模块，并探讨了相应的失效模式。错误率的影响。如图 1(a)、1(b)、1(d) 和 1(e) 所示，我们向不同模型中注入错误，所得结果与先前的观察 [30, 43] 一致。这些结果验证了机器学习工作负载表现出一定程度的容错能力。例如，图 1(a) 和 1(d) 表明，在低错误率（例如 ≤ 1 × 10⁻¹⁰）下，性能几乎保持不变。然而，当错误率超过某个阈值时，模型准确率急剧下降，困惑度迅速上升。以采用 BF16 的 Llama3-3B 为例，其阈值为 5 × 10⁻¹⁰。在安全关键系统中，计算密集型设备中超过 10⁻⁷ 的静默错误率会使 NPU 工作负载极其脆弱 [17]。因此，尽管 NPU 工作负载表现出一定程度的容错能力，但在缺乏可靠性支持的情况下，这并不能使其准确运行。</p>
+<p>错误位置的影响。如图 1(c) 和 1(f) 所示，我们考察了在不同位置进行错误注入的影响。结果表明，即使在高错误率下，尾数中的错误对模型性能几乎没有影响。相比之下，符号位和指数位中的错误会导致显著的性能下降：所有 LLM 对 BF16 的最高四位高度敏感，而大多数 DNN 同样对 FP32 的最高九位表现出强敏感性。因此，NPU 的容错应优先保护那些对输出影响更大的位（例如符号位和指数位），从而在给定成本下获得更高的可靠性收益。</p>
+<p>系统失效模式分析。在神经网络处理器（NPU）中，推理从指令的取指-译码-发射开始，其中寄存器承载调度与配置信息；随后输入矩阵被加载到本地存储器中。数据流入脉动阵列以执行乘累加（MAC）运算，再经过非线性算子处理，结果最终被写回。沿着这条路径，并参考 [30, 43]，我们识别出四类关键组件：（i）寄存器，其故障会直接扰动指令/控制语义，造成译码或配置信息损坏，进而导致程序崩溃；（ii）本地存储器，单个错误即可在并行计算与后续各层之间广泛传播，造成系统性的输出失真与任务失败；（iii）脉动阵列，其执行核心的矩阵 MAC 内核运算，占推理时间的 70% 以上 [12]，因此此处发生的故障会迅速级联传播至后续各层，显著降低端到端精度；（iv）非线性算子，其选择性放大/饱和效应决定了上游错误的可见性及其对模型输出的影响。通过沿 NPU 流水线采用系统级视角，这一失效模式分析使我们能够依据各模块在数据流中的角色及其故障特性，为其量身定制差异化的可靠性策略，从而构建一个贯穿微架构的综合性全栈可靠性框架，并以极小的开销提供端到端保护。</p>
+<h2>3 Strix: an Overview</h2>
+<figure><img src="assets/p029/figures/fig_2.png" alt="Figure 2. Strix 的架构概览。Strix 为 NPU 应用模块特定的硬件防护措施。" loading="lazy"></figure>
+<figcaption>Figure 2. Strix 的架构概览。Strix 为 NPU 应用模块特定的硬件防护措施。</figcaption>
+<p>框架工作流程。在 NPU 中，软件应用程序接口（API）将输入切分为多个数据块，并通过多条 mvin 指令将其逐行加载到暂存器（scratchpad）中（图 2.f）。当直接存储器访问（DMA）对每个矩阵进行流式传输时，校验和加法器（checksum adder，图 2.d）在单次遍历中计算出所有行/列校验和（详见第 4.B 节），并将其存储到 guardpad 和 guardlinker 中（图 2.e 和 g）。当一条计算指令被派发到 NPU 时，它会生成一条 precompute 子指令，该子指令与计算指令一同发射（图 2.a）。precompute 会预先调度校验器与纠错器（verifier and corrector，图 2.d），以对原始数据块进行检测与纠正。鉴于新传入的矩阵可能仅部分覆盖原始数据块，校验和加法器随后会在纠错之后将校验和附加到传入矩阵上，从而支持后续计算过程中的校验。在乘法运算期间，我们拦截送往脉动阵列（systolic array）的输入流，并将权重矩阵的列校验和、完整输入矩阵、输入矩阵的行校验和以及转置后的权重矩阵引导至 shield group（图 2.k）进行校验。经校验的结果及其校验和被写回累加器（accumulator）和 guardpad，写回阶段会重复执行校验和的校验与纠错。此外，基于第 2 节的结论，低影响的位位置（例如尾数）会被忽略，以降低开销。另外，为辅助永久性故障的定位，guardlinker 中的 error block（图 2.e）会记录故障位置（例如存储器地址和 tile）。任务完成后，Strix 会发出 mvout_error_block 指令以报告受影响的数据块。</p>
+<h2>4.1 Reliability of Registers</h2>
+<p>神经网络处理器（NPU）中的寄存器通常负责存储指令、常量及其他信息。寄存器固定的位宽和频繁的访问使得纠错码（ECC）成为一种高性价比的策略。</p>
+<figure><img src="assets/p029/figures/fig_3.png" alt="Figure 3. SEC-DED ECC：每个部分奇偶校验位校验相同颜色的数据，全局奇偶校验位校验各部分奇偶校验位。" loading="lazy"></figure>
+<figcaption>Figure 3. SEC-DED ECC：每个部分奇偶校验位校验相同颜色的数据，全局奇偶校验位校验各部分奇偶校验位。</figcaption>
+<p>保护机制。图 3 首先计算一个全局奇偶校验位，然后从按位位置索引的数据子集中推导出部分奇偶校验位，从而生成奇校验。每个部分奇偶校验位监测的是二进制索引中特定位置被置为 1 的原始数据。例如，在图 3 中，红色部分奇偶校验位（二进制 001）由最后一个二进制索引位被置为 1 的原始数据子集生成（即寄存器的红色位，二进制 0001 等）。如果红色和蓝色部分奇偶校验与全局奇偶校验均不匹配，则故障可定位到位 0011。反之，如果部分奇偶校验不匹配而全局奇偶校验正确，则可推断发生了多位错误。该机制引入的开销为 ( ⌈ log 2 ( 𝛼 + 1) ⌉ + 1) 位（𝛼：寄存器位宽）。</p>
+<h2>4.2 Reliability of Local Memory</h2>
+<p>在 Gemmini 中，局部存储器（包括暂存存储器 scratchpad 与累加器）按行存储数据，并利用双缓冲进行性能优化，每行存储的数据量与每行中的处理单元（PE）对齐。鉴于局部存储器的高吞吐量特性，直接应用纠错码（ECC）不足以应对多位错误，且会带来显著开销。因此，我们采用双向量校验和方案，在实现错误检测与纠正的同时，避免对原始设计进行侵入式修改。我们设计了一个用于存储校验和的 guardpad，以及一个包含 linker block 与 error block 的 guardlinker。linker block 负责确保数据与校验和之间的映射，并记录出现故障的存储器行与 tile，同时跟踪错误发生次数，以协助开发者定位永久性故障。</p>
+<p>保护机制。图 4 展示了在局部存储器内协同工作的微架构。具体而言，当直接存储器访问（DMA）写入数据时，linker block（图 4.d）与校验和加法器（图 4.a）会对数据流进行监听截取。校验和加法器与一组加法树配合生成行校验和，并与一组加法器-寄存器单元配合生成列校验和，这些校验和随后被写入 guardpad。在读取数据时，数据校验器（data verifier，图 4.b）会获取校验和进行验证。若出现不匹配，数据纠正器（data corrector，图 4.c）会利用错误信息（包括行、列位置以及与校验和的差异）来定位故障、纠正数据，并更新 error block（图 4.e）。随后，纠正后的数据从纠正器内部的缓冲区转发出去。较不关键的位（例如本研究中的尾数）可被选择性地忽略以降低成本；更一般而言，位选择策略可由开发者调整，以适配其他模型。</p>
+<figure><img src="assets/p029/figures/fig_4.png" alt="Figure 4. 与本地存储器可靠性相关的组件。蓝线：读路径；黑线：写路径；灰线：公共路径。" loading="lazy"></figure>
+<figcaption>Figure 4. 与本地存储器可靠性相关的组件。蓝线：读路径；黑线：写路径；灰线：公共路径。</figcaption>
+<p>加法树设计。在局部存储器中，校验和仅用于验证原始数据的正确性，绝不参与矩阵乘法。因此，加法树将数据视为二进制流并执行二进制加法。例如，1100 与 0011 相加总是得到 1111，无需进行浮点（FP）转换。溢出同样是无害的。需要强调的是，这一方法仅限于局部存储器。</p>
+<p>错误检测与纠正。如果重新计算得到的校验和与存储的校验和不一致，我们首先定位不匹配行与不匹配列的交叉点。当仅存在单一不匹配时，该错误可通过校验和差值被唯一地纠正。然而，当出现多个行与列不匹配时，故障定位会产生歧义。因此，我们利用这样一个特性：单个错误数据会同时在其所在行和列上引起计算和与校验和之间的一致性差异。这使得交叉定位成为可能，从而能够基于观察到的差异进行错误纠正。最后，如果两个正交校验和中仅有一个失效而另一个保持正确，我们将故障归因于校验和本身（而非数据），从而避免假阳性纠正。</p>
+<h2>4.3 Reliability of the Systolic Array</h2>
+<p>In Gemmini, data fetching is controlled by configuration registers (e.g., stride). Thus, the fetched data may not always be the original block. The computation modes supported by Gemmini include Output-Stationary Mode (OS-M) and Weight-Stationary Mode (WSM). Matrix operations follow 𝐶 = 𝐴 × 𝐵 + 𝐷 , where 𝐴 is the input matrix, 𝐵 is the weight matrix, and 𝐷 is the bias matrix. In WS-M, 𝐵 is preloaded, while 𝐴 is fed in. The partial sums are stored in the accumulator and later added to 𝐷 . In OS-M, 𝐷 is preloaded, while 𝐴 and 𝐵 are streamed. Moreover, API-defined sub-matrix sizes must match the PE-row width. Thus, integrating fault-tolerant algorithms directly would need changes to the hardware architecture, software APIs, and workloads. Hence, unlike interleaved, detectiononly schemes [62], we deploy a shield group fully decoupled from the systolic array. This decoupling preserves the array&#x27;s execution rhythm and produces row/column checksums to enable error correction. The shield group achieves low-slowdown verification through: (i) a configuration strategy enabling parallel execution with the array, and (ii) a pipeline allowing concurrent operation with guard operators. Principle. Fig. 5(a) shows the principle of the shield group. We first add column checksums to 𝐴 and row checksums to 𝐵 . Fixing 𝐵 &#x27;s 𝐴</p>
+<p>column checksums, we stream row by row. Each row is multiplied</p>
+<figure><img src="assets/p029/figures/fig_5.png" alt="" loading="lazy"></figure>
+<p>(c) Strix pipeline in computational processes.</p>
+<p>by its corresponding checksum and accumulated to compute the row checksum for 𝐴 × 𝐵 . Similarly, fixing the row checksums of 𝐴 and streaming in the transpose of 𝐵 ( 𝐵 𝑇 in Fig. 5(a)), we compute the final column checksums. Finally, the results are identical to ABFT. Protection mechanism. Figs. 5(b) and 5(c) illustrate the shield group&#x27;s micro-architecture and its pipeline. Specifically, the shield employs a set of multipliers aligned with the number of PEs per row and several small adder trees. When a compute instruction is dispatched to the NPU, the system concurrently generates a precompute sub-instruction, which is issued alongside the corresponding compute , establishing explicit dependencies with both preload and compute . In WS-M, the precompute executes first, triggering the data verifier and corrector to ensure original data integrity. The checksum adder then computes checksums for 𝐴 (stage S #1-1 in Fig. 5(c)). While 𝐵 is preloaded, the transposer and checksum adder receive the data stream, performing transposition and checksum computation ( S #1-2 in Fig. 5(c)). At this stage, the shield group has acquired all necessary elements. Once the compute arrives, the shield group executes in parallel with the systolic array ( S #1-3 in Fig. 5(c)). Upon completion, the data verifier compares the results, while the data corrector performs fault localisation, error correction ( S #1-4 in Fig. 5(c)). Finally, the result is added to 𝐷 , and similarly, in the guardpad, we yield the final checksums. In OS-M, the flow is identical, except checksums of 𝐷 are generated when its preload.</p>
+<p>Pipeline design. Strix masks guard operator latency with a four-stage pipeline (see Fig. 5(c)). The latency introduced by Strix manifests in the stages 1 and 4. To conceal these delays, we leverage pre-execution of precompute , ensuring that the first stage overlaps with the third stage (computing) and the fourth stage overlaps with the second stage (data preloading). For instance, in Fig. 5(c), S #2-1 is overlapped by S #1-3 , and S #1-4 is overlapped by S #2-2 . As a result, this design enables near-zero-latency data processing by guard operators.</p>
+<p>400%</p>
+<figure><img src="assets/p029/figures/fig_6.png" alt="Figure 7. Strix 的错误检测与纠正覆盖率。" loading="lazy"></figure>
+<figcaption>Figure 7. Strix 的错误检测与纠正覆盖率。</figcaption>
+<p>Shield configuration. To hide shield-induced latency (WS-M shown; other modes analogous), we size the shield group so that its total latency 𝜎 does not exceed the array&#x27;s matrix window 𝐿 𝑆𝐴 . Let 𝐼 be the tiles per row of the array, 𝐽 the PEs per row within a tile, and 𝐾 the number of shields. For an 𝐼 · 𝐽 × 𝐼 · 𝐽 matrix, 𝐿 𝑆𝐴 is the interval from the first input&#x27;s arrival to the last output&#x27;s departure: the final input arrives after 𝐼 · 𝐽 + 𝐼 - 1 cycles and needs a further 𝐼 cycles to traverse the array, hence 𝐿 𝑆𝐴 = 𝐼 · 𝐽 + 2 · 𝐼 - 1 cycles [58]. Each shield ingests one vector per cycle and uses multiplier rows aligned with array rows plus adder trees whose first level fan-in is at most 2 𝐽 - 1 . The resulting shield latency is:</p>
+<p>其中，2 · 𝐼 · 𝐽 𝐾 表示在 𝐾 个 shield 上处理两个矩阵所需的开销，最后两项则刻画了流水线启动/加法树深度的开销。通过强制满足 𝜎 ≤ 𝐿 𝑆𝐴，即可得到最小的 shield 并行度：</p>
+<p>通过配置 𝐾 个 shield，我们可以将 shield 延迟与阵列执行相重叠，从而减少可靠性部署所带来的性能下降。加法树设计。深度较大的加法树会影响电路的时序收敛。为缓解这一问题，并考虑到 tile 内的每个 PE 由组合逻辑和一个 MAC 设计构成，我们将加法树的深度上限设为每个 tile 中每行 PE 的数量——使其与 NPU 原生的关键路径相匹配，而不是延长关键路径。我们还对边缘加法树中的冗余加法器进行剪枝，以提升资源利用率。</p>
+<p>数据溢出。与本地存储器中的静态数据不同，计算得到的数值可能会溢出并破坏校验。对于原始数据，PE 中集成了溢出预防机制，在执行 MAC 时采用位扩展策略。我们还确保校验和与输出采用相同的位宽，从而为防止溢出提供足够的裕量。</p>
+<p>故障定位。在 WS-M 中，tile 故障会破坏其自身所在的列，且往往会波及后续的列 [2]；连续出现的校验和不匹配使 Strix 能够推断出存在故障 tile，并将其定位到最早出现差异的列。在 OS-M 中，通过定位最早出现不匹配的行和列，即可准确识别出故障 tile [2]。</p>
+<h2>4.4 Reliability of Non-linear Operators</h2>
+<p>神经网络处理器（NPU）中非线性算子的开销取决于其实现方式。例如，专用集成电路（ASIC）单元精确但成本高昂 [56]，而近似设计则较为轻量 [16]。因此，我们</p>
+<figure><img src="assets/p029/figures/fig_7.png" alt="" loading="lazy"></figure>
+<p>(c) 不同策略在 FP32-D 下对深度神经网络（DNN）精度的影响。</p>
+<p>借助针对特定算子的数学不变量来验证前者，并以不变量与冗余相结合的方式来验证后者。在 Gemmini 中，非线性算子包括 LayerNorm、ReLU、Softmax、GELU 和 Pooling，每个算子的开销均低于 1% [16]。因此，对于具有明确代数性质的算子，我们基于这些性质进行验证。反之，对于缺乏此类性质或规则较为复杂的算子，我们则通过冗余来确保可靠性。</p>
+<p>具体而言，对于 LayerNorm，我们利用非仿射归一化激活值之和应为 0 这一性质来实现一致性检查。对于 Softmax，我们基于其输出之和应为 1 进行快速验证。相比之下，ReLU、GELU 和 Pooling 也表现出一定的性质，但需要更复杂的验证。因此，我们采用冗余副本的方法。如此一来，我们在保持功能正确性高覆盖率的同时，降低了验证开销。</p>
+<h2>5.1 Experimental Setup</h2>
+<p>Platform. We deploy Strix on a 20-node FPGA cluster (AMD Virtex UltraScale+ VU19P) with four setups: (i) INT8 default (INT8-D): based on the default open-source Gemmini, including a 256KB scratchpad, 64KB accumulator, and a 16 × 16 systolic array (one PE per tile); (ii) INT8 industrial (INT8-I): 2048KB scratchpad, 512KB accumulator, 128 × 128 systolic array ( 4 × 4 PEs per tile, same as TPU v3 [35]); (iii) FP32 default (FP32-D): 1024KB scratchpad, 64KB accumulator, 16 × 16 systolic array (one PE per tile); (iv) BF16 Industrial (BF16-I): 4096KB scratchpad, 1024KB accumulator, 128 × 128 systolic array ( 4 × 4 PEs per tile). Due to FPGA resource limits, BF16-I is simulated in PyTorch following the Spike-modelled behaviour [49] and used only for LLM performance analysis.</p>
+<p>Models and datasets. To evaluate Strix, we benchmark both DNNs and LLMs. The DNN suite covers three mainstream families: CNNs (AlexNet [38], MobileNet-V2 [52]), residual networks (ResNet50 [24]), and transformer-based models (BERT [36]). Owing to Gemmini limitations, BERT is evaluated at INT8, whereas the remaining DNNs are tested at both FP32 and INT8. For LLMs, we choose three widely used models: Llama-3.2-1B [19], Qwen-2.5-3B [27], and Mistral-7B [33]. For datasets, image classification models are evaluated on the Tiny ImageNet [63], BERT is evaluated on the DBPedia14 [47], and the LLMs are evaluated on the LAMBADA [45]. For all cases, the first 1,000 samples are used for evaluation.</p>
+<figure><img src="assets/p029/figures/fig_8.png" alt="" loading="lazy"></figure>
+<p>Fault injection. We implement multiple types of fault injection within the hardware of Strix. The injection targets include original data, checksums, and hardware components. The injection rate is defined relative to the bit count of the original input. We inject both transient and permanent faults via custom ISA extensions. Transient faults are injected by randomly flipping bits at each pipeline stage during execution. Permanent faults are injected following the method proposed in [1], where additional hardware logic is incorporated to</p>
+<p>enable custom instructions that forcibly fix selected signals to 1 or 0. Baseline setup. The default fault injection rate is 1 × 10 - 7 . We compare against three baselines representing common hardware/software schemes and a contemporary SOTA, all implemented under a hardware budget area-matched to Strix for a fair comparison: (i) Hardware (partial TMR). Registers and local memory are protected with ECC, while the systolic array employs TMR. (ii) Software (triple IR). Sensitivity-guided redundancy: early layers for CNNs (AlexNet first two convolutions; first convolution of each MobileNet-V2 block; first ResNet-50 residual block [21, 30]); feed-forward layers for BERT [15]; and the first 20% / last 10% of layers for LLMs [23]. (iii) SOTA (ReaLM [62]). Online detection with selective rollback; to avoid unbounded latency under permanent faults, at most one rollback attempt is permitted. All metrics are averaged over 10 runs.</p>
+<h2>5.2 Observations and Results Analysis</h2>
+<p>(1) Performance overhead. Fig. 6 presents the performance overhead across different schemes. Overall, TMR incurs the highest slowdown, typically exceeding 1 . 80 × , and reaching 3 . 68 × for ResNet-50 under INT8-D. In contrast, IR shows greater variability ( 1 . 13 × to 1 . 95 × ), indicating strong dependence on model structure and compute density. ReaLM falls between 1 . 22 × to 1 . 59 × ; slowdowns grow with larger systolic arrays (e.g., INT8-D) because, at a fixed fault rate, permatrix error incidence rises and each rollback carries higher cost. By contrast, Strix maintains the lowest performance overhead across all evaluated scenarios, with slowdowns ranging from 1 . 02 × to 1 . 07 × and a geometric slowdown of 1 . 04 × . This demonstrates that Strix achieves significantly better adaptability and scalability.</p>
+<p>(2) Detection coverage. Fig. 7(a) reports the error detection coverage of Strix. Overall, Strix exhibits consistently high capability in INT8Dand INT8-I, with coverage exceeding 99%. In FP32-D and BF16-I, Strix achieves over 97% detection coverage under non-extreme fault rates (i.e., ≤ 10 - 6 ). The slight degradation at higher fault rates is attributable to: (i) precision loss inherent to FP in hardware, and (ii) faults injected into checksum bits, which can impair detection.</p>
+<p>(3) Correction coverage. Fig. 7(b) presents the correction coverage of Strix. Under typical fault rates (i.e., ≤ 10 - 6 ), all configurations maintain a correction coverage exceeding 95%. However, as the</p>
+<p>𝐿𝐿</p>
+<p>atency Jiapeng Guan et al.</p>
+<p>Table 1. The worst-case detection latency of Strix-added components.</p>
+<p>Component</p>
+<p>Configuration</p>
+<p>INT8-D</p>
+<p>INT8-I</p>
+<p>FP32-D</p>
+<p>Local memory</p>
+<p>0.16</p>
+<p>0.19</p>
+<p>0.53</p>
+<p>0.67</p>
+<p>0.36</p>
+<p>0.41</p>
+<p>0.03</p>
+<p>Table 2. The max frequency of the Gemmini &amp; Strix-added components.</p>
+<div class="tablewrap"><table><thead><tr><th>Configuration</th><th>Configuration</th><th>1×1 𝑀𝑀𝑀𝑀𝑀𝑀 𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓</th><th>2×2 𝑀𝑀𝑀𝑀𝑀𝑀 𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓</th><th>4×4 𝑀𝑀𝑀𝑀𝑀𝑀 𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓</th><th>8×8 𝑀𝑀𝑀𝑀𝑀𝑀 𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓</th></tr></thead><tbody>
+<tr><td></td><td>Gemmini</td><td>4.76 GHz</td><td>3.57 GHz</td><td>2.56 GHz</td><td>1.75 GHz</td></tr>
+<tr><td></td><td>INT8 Strix-added</td><td>8.33 GHz</td><td>6.25 GHz</td><td>5.00 GHz</td><td>2.94 GHz</td></tr>
+<tr><td>FP32</td><td>Gemmini</td><td>2.44 GHz</td><td>1.36 GHz</td><td>0.66 GHz</td><td>0.34 GHz</td></tr>
+<tr><td>FP32</td><td>Strix-added</td><td>2.86 GHz</td><td>1.40 GHz</td><td>0.72 GHz</td><td>0.36 GHz</td></tr>
+</tbody></table></div>
+<p>| Configuration   | Configuration    | 1×1 𝑀𝑀𝑀𝑀𝑀𝑀 𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓   | 2×2 𝑀𝑀𝑀𝑀𝑀𝑀 𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓   | 4×4 𝑀𝑀𝑀𝑀𝑀𝑀 𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓   | 8×8 𝑀𝑀𝑀𝑀𝑀𝑀 𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓𝑓   |</p>
+<p>随着故障率的上升，可以观察到明显的下降。在这四种配置中，INT8-I 和 BF16-I 受影响最大。这一趋势主要源于这些配置使用了更大的脉动阵列。在高故障率下，所涉及处理单元数量的增加提高了多位故障的发生概率，从而削弱了纠错机制的有效性。(4) 深度神经网络（DNN）性能。图 8 展示了不同设置下 DNN 精度的变化。与 Vanilla 相比，所有策略都提升了推理精度，但随着故障率的上升，它们的有效性出现了分化。IR 在低故障率下能提供中等程度的保护，但会迅速退化。ReaLM 的回滚机制在永久性故障下会失效；因此，在较高故障率下，尤其是在脉动阵列更大且存在严重故障的情况下，模型质量会发生崩溃，这一趋势即使在多次试验取平均之后依然存在。TMR 的表现符合预期，在所有故障率下均保持最高精度。相比之下，Strix 在实际故障范围内缓解了精度损失，其表现优于 IR，并在低故障率下与 ReaLM/TMR 相当；只有在非常高的故障率下，Strix 才表现出轻微的退化，但仍优于 ReaLM。在各配置中，Strix 在 INT8-D 和 FP32-D 上带来了更大的收益。尽管 INT8-I 由于阵列更大而更具挑战性，Strix 在若干故障设置下仍接近 TMR。</p>
+<p>(5) 大语言模型（LLM）性能。图 9 展示了 LLM 性能随故障率的变化。总体趋势与 DNN 结果一致。所有保护机制均能带来收益，但 IR 在低故障率下仅能提供有限的改进。ReaLM 再次因无法处理永久性故障而受阻，落后于 Strix，不过 LLM 固有的较低容错能力略微缩小了这一差距。相比之下，Strix 所保持的精度和困惑度与 TMR 几乎没有差别，缓解了 LLM 在故障环境中的性能下降。</p>
+<p>(6) 最坏情况检测延迟。我们在 500MHz 频率下测量了 Strix 内各组件的最坏情况错误检测延迟。为确保该延迟确实由 Strix 引起，我们将检测延迟定义为指令执行时刻与其被检测到时刻之间的时间间隔。如表 1 所示，Strix 的检测延迟保持在亚微秒以内。在脉动阵列中观察到的较高延迟源于 Strix 的事后验证策略，即验证被推迟到矩阵计算和校验和生成完成之后才进行。</p>
+<p>(7) 关键路径分析。为了确定关键路径，我们在每个 tile 采用不同 PE 配置的情况下，测试了 Gemmini 以及 Strix 所引入组件的最大频率。在 RTL 综合过程中，我们施加不同的时钟约束以指定目标频率，并进行多轮综合，直到工具无法满足该频率为止。如表 2 所示，无论是 INT8 还是 FP32，也无论每个 tile 中 PE 数量多少，Strix 所引入的组件在所有配置下均表现出高于 Gemmini 的频率。也就是说，决定关键路径的因素仍然是原始 NPU，而非 Strix。</p>
+<p>(8) 硬件开销。硬件评估使用 Synopsys Design Compiler（v2019.12）以及工业标准的 TSMC 28nm 工艺库。在各配置下，Strix 在 INT8-D 上带来 20.7% 的面积开销和 23.2% 的功耗开销，在 INT8-I 上为 8.7%/16.8%，在 FP32-D 上为 10.2%/21.3%。INT8-D 上较高的开销源于其较小的基线；INT8-I 和 FP32-D 则能更有效地摊销这些机制。新增面积主要由 guardpad 占据（INT8-D/INT8-I/FP32-D 分别为 13.9%、5.0%、4.6%），其次是 guard operators（3.4%/3.5%/5.3%），因为它们被实例化在流水线边界处以保持连续执行。</p>
+<h2>6 Conclusion</h2>
+<p>本文提出了 Strix，一个面向 NPU 可靠性的全栈框架。Strix 表明，有效且高效的保护必须建立在对系统的深刻理解之上。通过从可靠性视角对 NPU 进行重新划分、识别关键失效模式，并依据所提出的洞察设计相应的缓解机制，Strix 在极小的性能与面积开销下，实现了近乎完全的故障覆盖率与近乎为零的检测延迟。</p>
+<h2>7 Acknowledgement</h2>
+<p>本工作得到国家重点研发计划（项目编号：2024YFB4405600）、美国国家科学基金会（资助编号：CNS-2340171）、江苏省基础研究计划（项目编号：BK20243042）以及中央高校基本科研业务费专项资金（项目编号：2242025K20013）的资助。</p></div></div></body></html>

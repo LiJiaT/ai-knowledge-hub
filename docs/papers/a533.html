@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学习重写 Prompt 以实现个性化文本生成（Learning to Rewrite Prompts for Personalized Text Generation）</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Learning to Rewrite Prompts for Personalized Text Generation</h1>
+<p class="lead">学习重写 Prompt 以实现个性化文本生成（Learning to Rewrite Prompts for Personalized Text Generation）</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">自动提示优化</span><span class="chip">提示技术</span><span class="chip">RAG与检索</span><span class="chip">成本与效率</span><span class="chip">人机协作</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a533.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文研究在 LLM 参数冻结、只能通过 API 以文本 prompt 交互、无法微调的现实场景下，如何自动优化个性化文本生成的提示词。方法在多阶段个性化框架（检索→排序→摘要→综合）产出的初始 prompt 基础上，训练一个 T5-11B 的 prompt rewriter，只重写其中依赖用户上下文的摘要与综合组件：先通过对 summary/synthesis 元素随机化生成 65 个变体、用冻结 LLM 逐一评估 Bleu 择优构造标签做监督学习以压缩搜索空间，再用 PPO 以生成质量为 reward 端到端强化学习。在邮件、Amazon 评论、Reddit 三个数据集上，SL+RL 训练的 RewriterSlRl 显著优于原始 prompt 及单独 SL 或 RL 的版本；仅 SL 效果接近原始 prompt，仅 RL 会生成无意义 token。分析发现冻结 LLM 对上下文噪声比微调模型更敏感，rewriter 学到删除离题摘要、重复关键关键词、按出现顺序重排等可解释模式，这些模式还能指导人工改写 prompt 并带来方向一致的提升。</p>
+<h2>问题</h2><p>在 LLM 是参数冻结的黑盒、只能通过 API 访问、无法微调的典型场景下，如何自动优化用于个性化文本生成的 prompt——尤其是其中依赖用户个人上下文的摘要与综合组件——使冻结 LLM 产出更贴近目标用户的文本。已有 RL 提示优化工作只针对输入无关的 instruction 部分，搜索空间小；而上下文相关组件的搜索空间巨大，直接用 RL 难以搜索。</p>
+<h2>方法</h2><p>基于 FtPersLlm 多阶段框架（用即时上下文作 query 检索并排序用户历史文档，再经摘要模型与关键词综合模型组装 prompt），新增基于 LLM 的写作风格综合作为第三类综合组件。训练一个比生成器更小的序列到序列模型（T5-11B）作为 prompt rewriter，仅重写 summary 与 synthesis 两个组件：SL 阶段对元素做随机化（打乱顺序并随机删除尾部元素）生成 65 个 prompt 变体，用冻结 LLM（PaLM 2，temperature=0）逐一评估 Bleu，选最佳变体为标签训练 rewriter（标签中剔除不变组件以提升训练效率）；RL 阶段用 PPO，以生成文档与 ground-truth 的 Bleu 为 reward 继续训练，动作空间覆盖全词表从而可引入新词。训练与测试用户不重叠（85/5/10 划分）。</p>
+<h2>关键结果</h2><p> 作为 SL 标签的最佳 prompt 变体在全部三个实验数据集上将 Bleu 比原始 prompt 提升约 10 个点（原文：improve Bleu by 10 over original prompts on all datasets）</p><p> RewriterSlRl 在邮件、Amazon 评论、Reddit 三个数据集上均以 0.01 显著性水平（paired t-test）大幅优于 Original；RewriterSl 仅与 Original 相当或略好；RewriterRl（无 SL 预训练）因搜索空间过大表现差，生成的 prompt 含无意义 token</p><p> 将 SL 标签生成的 prompt 变体数从 65 降到 4，RewriterSlRl 性能差异不具统计显著性，可大幅降低训练成本</p><p> 推理成本由对 LLM 生成器的 API 调用主导（rewriter 为更小的 T5-11B），且重写后的 prompt 更短，可能进一步降低用户成本</p><p> 减小 rewriter 模型尺寸会导致性能下降，但各尺寸 T5 仍带来可观的 prompt 重写收益</p><p> 用学到的模式人工改写原始 prompt（如去掉 summary、保留 keywords+writing style、Email 场景采用统一的 thorough 风格描述）后，改进方向与 RewriterSlRl 一致且明显提升，但所有人工变体仍显著低于 RewriterSlRl</p>
+<h2>创新点</h2><p>与已有 RL 提示优化工作（优化输入无关、跨样本共享的 instruction 部分）不同，本文直接优化个性化生成中依赖输入/上下文的组件（summary、synthesis），通过无限制编辑操作应对大得多的搜索空间，并提出 SL+RL 链式训练范式（SL 压缩搜索空间、RL 端到端优化）。与先前&#x27;RL 学到的 prompt 不合语法、人类不可读&#x27;的结论相反，本文学到的 prompt 人类可读且能提炼出可指导人工改写的可解释规则。场景限定为仅能通过 API 访问的冻结 LLM（离散 hard prompt），区别于需要访问模型参数的 soft prompt 方法（prefix tuning、prompt tuning）。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.2 提示工程</p><p><b>理由：</b>直接命中 3.2 提示工程中的&#x27;自动提示优化&#x27;：论文核心就是训练 prompt rewriter 自动改写 prompt，并给出可复用的 SL+RL 训练范式。同时命中 3.1 上下文工程与记忆：其优化对象正是&#x27;检索→排序→摘要→综合&#x27;多阶段组织出的结构化上下文，并实证发现冻结 LLM 对上下文噪声（离题摘要、弱相关关键词）比微调模型更敏感、微调场景下有效的上下文组装对冻结 LLM 并非最优——这对团队设计 RAG/知识库问答与代码生成 Agent 的上下文组装策略有直接指导意义。论文还包含成本分析（变体数从 65 降到 4、推理成本由生成器调用主导）与&#x27;学到的规则指导人工改 prompt&#x27;的人机协作路径。局限是任务域为个性化写作而非工程场景，且需要可计算的 reward 与参考答案。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

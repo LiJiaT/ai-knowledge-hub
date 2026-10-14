@@ -1,0 +1,305 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Promptware 杀伤链：Prompt Injection 如何逐步演化为多步骤恶意软件投递机制</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>The Promptware Kill Chain: How Prompt Injections Gradually Evolved Into a Multistep Malware Delivery Mechanism</h1>
+<p class="lead">Promptware 杀伤链：Prompt Injection 如何逐步演化为多步骤恶意软件投递机制</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">可靠性与安全</span><span class="chip">RAG与检索</span><span class="chip">记忆管理</span><span class="chip">上下文窗口</span><span class="chip">Agent框架</span><span class="chip">工具调用</span><span class="chip">代码生成Agent</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a228.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>这是一篇 SoK 论文，核心论点是 prompt injection 已从单次输入操纵演化为类似恶意软件的多阶段攻击机制，作者将其命名为 promptware，并提出七阶段杀伤链：Initial Access（prompt injection）、Privilege Escalation（jailbreaking）、Reconnaissance、Persistence（memory 与 retrieval poisoning）、Command &amp; Control、Lateral Movement、Actions on Objective。方法上，论文对 2023 年至 2026 年 1 月的 36 起著名事件与研究逐一定阶段映射，追踪攻击能力演化，并按 Prevention/Mitigation/Remediation 类型、部署层、可用性影响与部署/维护成本系统评估各阶段防御措施。关键结论：跨越四个及以上阶段的攻击从 2023 年的 0 起增至 2025-2026 年的 15 起，AI 编码助手成为重点目标（21 起中占 7 起）；强预防以牺牲可用性为代价，且 reconnaissance 等阶段缺乏对策。对团队而言，它提供了评估自建 Agent/RAG/编码助手类应用安全暴露面的结构化框架。</p>
+<h2>问题</h2><p>现有研究与业界把 prompt injection 当作 LLM 版 SQL injection 的单点输入漏洞，认为靠更准确的分类器即可解决；已有综述主要聚焦 injection 与 jailbreaking 两个初始阶段，忽视攻击已具备持久化、C2、横向移动的完整生命周期。论文要解决的问题是：建立能刻画 LLM 应用攻击完整演化的分析框架（promptware 杀伤链），使风险评估与防御从单点 injection 防护扩展到覆盖全生命周期的 defense-in-depth。</p>
+<h2>方法</h2><p>提出 promptware（prompt-initiated malware）定义：通过 prompt 触发、利用应用 LLM 的上下文、权限与功能执行恶意活动的多态恶意软件执行机制；借鉴经典 cyber kill chain 构建七阶段模型；将 2023 年 2 月至 2026 年 1 月的 36 起事件/研究逐一映射到杀伤链阶段并做时间演化分析；最后按类型（P/M/Re）、部署层（Model/Wrapper/Architectural/External）、可用性影响、部署 effort 与维护 effort 等标准，逐阶段评估对策，包括 plan-then-execute、instruction-data separation、prompt segmentation/spotlighting、dual-stream retrieval、user confirmation、memory resetting、dataset sanitization、least privilege tool access、component isolation、runtime intent validation、action sandboxing、canary tokens、behavioral monitoring 等。</p>
+<h2>关键结果</h2><p> 对 36 起事件的分析显示，达成四个及以上杀伤链阶段的攻击从 2023 年的 0 起增至 2024 年的 7 起、2025-2026 年的 15 起（摘要口径为至少 21 起）</p><p> 攻击覆盖从 2023 年的 2-3 阶段演化为 2025-2026 年常规达到 4 阶段以上；数据集中无攻击实现全部七阶段，最高覆盖为五阶段</p><p> promptware-native C2 仅两例实现：2024 年 10 月的 ChatGPT ZombAI 与 2026 年 1 月的 Reprompt</p><p> 2025-2026 年 21 起事件中 AI 编码助手占 7 起、企业 AI 占 6 起；AI worms 杀伤链覆盖最高（3 起中 2 起达五阶段）</p><p> Freysa AI heist 展示通过社会工程从 AI 控制的加密货币钱包窃取 47,000 美元</p><p> 防御评估结论：所有预防机制均显著影响可用性；lateral movement 仅有 3 种对策、C2 3 种、reconnaissance 无对策、action on objective 7 种</p>
+<h2>创新点</h2><p>区别于已有综述只聚焦 prompt injection 与 jailbreaking 两个初始阶段、并把 prompt injection 当作可用分类器解决的 SQL injection 类问题，本文首次将其系统化为 promptware——一种由 prompt 发起的恶意软件执行机制，借用经典 kill chain 方法论建立七阶段模型，用 36 起真实事件验证攻击的多阶段演化（从 2023 年的 2-3 阶段到近期的 4-5 阶段），并把防御讨论从单点 injection 防护扩展为覆盖全生命周期、按部署层与成本分级的 defense-in-depth 体系。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.5 评测与可靠使用 | 3.1 上下文工程与记忆 | 3.3 Agent 架构与工具使用</p><p><b>理由：</b>论文直接命中 3.5 的&#x27;可靠性/安全性/滥用防护&#x27;与&#x27;AI 辅助工程的实证研究&#x27;：团队构建的代码生成/审查助手、知识库问答（RAG）与带工具的 Agent 正是论文统计中的重点攻击面——2025-2026 年 21 起事件中 7 起针对 AI 编码助手，多起利用 RAG 依赖型持久化（文档、邮件、日历投毒）与长期 memory 投毒。Persistence 阶段对 retrieval-dependent 与 retrieval-independent 持久化的区分直接关联 3.1 的上下文与记忆管理实践；对 plan-then-execute、least privilege tool access、runtime intent validation、action sandboxing 等架构层对策的评估直接关联 3.3 的 Agent harness 与工具调用设计。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2601.09625v2  [cs.CR]  10 Feb 2026</p>
+<h2>The Promptware Kill Chain: How Prompt Injections Gradually Evolved Into a Multistep Malware Delivery Mechanism</h2>
+<p>Oleg Brodt 1 , Elad Feldman 2 , Bruce Schneier 3 , Ben Nassi 2</p>
+<p>1 内盖夫本-古里安大学软件与信息系统工程系</p>
+<p>2 特拉维夫大学电气与计算机工程学院</p>
+<p>3 哈佛大学肯尼迪学院，以及多伦多大学蒙克学院</p>
+<p>摘要—提示注入最初被视为 SQL 注入在大语言模型（LLM）中的类比。然而，在过去三年中，被称为提示注入的攻击已从孤立的输入操纵型漏洞利用，演化为类似恶意软件的多步骤攻击机制。在本文中，我们论证提示注入已演化为提示件（promptware），即一类新型恶意软件执行机制，其通过专门构造用于利用应用程序 LLM 的提示来触发。我们提出一个七阶段的提示件杀伤链：初始访问（Initial Access，提示注入）、权限提升（Privilege Escalation，越狱）、侦察（Reconnaissance）、持久化（Persistence，记忆与检索投毒）、命令与控制（Command and Control）、横向移动（Lateral Movement）以及目标行动（Actions on Objective）。我们分析了三十六项影响生产环境 LLM 系统的著名研究与真实世界事件，并表明至少有二十一起有记录的攻击贯穿了该杀伤链的四个或更多阶段，这证明该威胁模型并非仅停留在理论层面。我们讨论了采用纵深防御方法来应对提示件生命周期所有阶段的必要性，并回顾了针对每个步骤的相关对策。通过将讨论从提示注入转向提示件杀伤链，我们的工作提供了分析上的清晰性，使结构化的风险评估成为可能，并为基于 LLM 的系统开展系统性安全工程奠定了基础。</p>
+<h2>I. INTRODUCTION</h2>
+<p>提示注入（prompt injection）于 2022 年 9 月 [1], [2], [3] 开始成为一种安全关注点，此时大语言模型（LLM）公开发布并被广泛采用尚不久。该术语最初由 Simon Willison [2] 在 X 平台上一篇帖子 [1] 之后提出，并被表述为 SQL 注入在 LLM 中的对应物。这一类比源于其与 SQL 注入的明显相似之处 [2]：LLM 无法可靠地区分受信任的系统提示（指令）与不受信任的用户输入（数据）[4]。当时，提示注入主要被视为一类用于操纵聊天机器人响应的新型输入操纵漏洞，在概念上与传统注入攻击相似。</p>
+<p>自提出以来，提示注入这一术语已演变为针对 LLM 应用攻击的统称，涵盖了广泛的对抗性行为、攻击向量与攻击后果。尽管这种扩展可以被解读为单纯的语义泛化，但我们认为它掩盖了攻击性质的根本转变，即从瞬态行为到持久化行为、从静态操纵到横向移动、以及从局限于数字域的影响到物理域效应的转变。我们进一步认为，这一误解掩盖了提示注入向一种我们称之为提示件（promptware）的新型恶意软件投递系统的演变，该系统通过多步骤杀伤链运作，并需要纵深防御安全机制，其范围远远超出针对提示注入的特定缓解措施。</p>
+<p>尽管已有若干综述考察了这一领域 [12], [13], [14], [15], [16], [17], [18]，但我们认为现有文献的范围仍然狭窄，主要原因有三。首先，先前的工作大多未能认识到，提示注入攻击已从孤立的漏洞利用演变为遵循结构化杀伤链的多步骤恶意软件投递机制。其次，大多数研究主要聚焦于该杀伤链的前两个阶段，即提示注入 [18] 与越狱（jailbreaking）[12], [13], [14]，而忽视了对理解完整攻击生命周期至关重要的后续阶段。第三，现有研究倾向于主要从提示注入防御的角度来框定基于 LLM 的应用的安全性，强调针对提示注入 [15], [16] 和越狱 [17] 的对策。这一视角忽视了采用纵深防御方法来应对杀伤链所有阶段 LLM 安全问题的必要性。因此，提示注入攻击常被误解为 SQL 注入在 LLM 中的对应物，即一个被认为可以通过足够精确的分类器加以解决的问题，从而低估了其系统性与多阶段特性。</p>
+<p>在本文中，我们论证：在过去三年里，提示注入已经演变为一种多步骤的恶意软件投递系统，我们将其称为提示件（promptware）。提示件遵循一个七阶段的杀伤链，威胁着广泛部署的 LLM 应用，包括 Google Assistant [6] 和 ChatGPT [5] 等系统。缓解此类威胁需要部署覆盖杀伤链所有阶段的防御措施，而非专门针对提示注入的对策。在第 II 节中，我们将提示注入与 SQL 注入、脚本注入和操作系统（OS）命令注入进行比较。我们表明：（1）将提示注入仅仅视为 SQL 注入在 LLM 上的类比，会显著低估其能力；（2）提示注入已经演变为一种由提示触发的恶意软件投递机制，我们将其定义为提示件。</p>
+<p>在第 III 节中，我们介绍七阶段的提示件杀伤链：（1）初始访问（提示注入）、（2）权限提升（越狱）、（3）侦察、（4）持久化（记忆与检索投毒）、（5）命令与控制（C2）、（6）横向移动（设备内与设备外传播），以及（7）达成目标行动（从数据渗出到未授权交易）。在第 IV 节中，我们分析了三十六起著名事件，并证明提示件杀伤链并非仅停留在概念层面：至少有十五起有记录的针对生产环境 LLM 系统的攻击贯穿了四个或更多阶段。在第 V 节中，我们研究了保护 LLM 应用免受提示件侵害的纵深防御策略，回顾了针对每个阶段的缓解措施并评估其有效性。最后，在第 VI 节中，我们讨论了我们的框架如何促进分析上的清晰性、系统性的风险评估、共同词汇的建立，以及对 LLM 系统纵深防御的原则性理解。</p>
+<div class="tablewrap"><table><thead><tr><th>Dimension</th><th>SQL Injection</th><th>Promptware / Prompt Injec- tion</th><th>Script Injection (JS, Python, etc.)</th><th>OS Command Injec- tion</th></tr></thead><tbody>
+<tr><td>Language used</td><td>SQL (Structured Query Language)</td><td>Natural language, obfuscated text, image, audio</td><td>Programming languages (JS, Python, PHP, etc.)</td><td>Shell commands (Bash, PowerShell, etc.)</td></tr>
+<tr><td>Relevant modalities</td><td>Text</td><td>Text, Image, Audio</td><td>Text</td><td>Text</td></tr>
+<tr><td>Target layer</td><td>Database</td><td>LLM</td><td>Application</td><td>Operating System</td></tr>
+<tr><td>Root cause</td><td>Lack of separation be- tween SQL code and data</td><td>Lack of separation between in- structions and user input</td><td>Lack of separation between code and data</td><td>Lack of separation be- tween shell commands and arguments</td></tr>
+<tr><td>Executor</td><td>Database engine</td><td>LLM inference engine</td><td>Language interpreter / VM</td><td>OS shell</td></tr>
+<tr><td>Outcome determin- ism</td><td>Deterministic</td><td>Non-deterministic</td><td>Deterministic</td><td>Deterministic</td></tr>
+<tr><td>Runtime environment</td><td>Database runtime</td><td>Application runtime</td><td>Application runtime</td><td>OS runtime</td></tr>
+<tr><td>Compromised space</td><td>Database</td><td>Application space</td><td>Application space</td><td>OS space</td></tr>
+<tr><td>Blast radius</td><td>Database-scoped</td><td>Application-wide (permissions, APIs, tools, connected ser- vices)</td><td>Application-wide (permissions, APIs, tools, connected ser- vices)</td><td>System/OS-wide</td></tr>
+<tr><td>Outcomes</td><td>Data corruption &amp; exfil- tration</td><td>Infostealer [5], spyware [6], cryptostealer, worms [7], tro- jans, remote code execution [8] 1</td><td>Infostealer [9], spyware, cryptostealer [10], worms [11], remote code execution</td><td>Remote code execution</td></tr>
+</tbody></table></div>
+<p>| Dimension             | SQL Injection                                  | Promptware / Prompt Injec- tion                                                                | Script Injection (JS, Python, etc.)                                             | OS Command Injec- tion                                    |</p>
+<figcaption>TABLE I Promptware与经典基于注入的攻击的对比</figcaption>
+<p>贡献。（1）我们不再将针对 LLM 应用的攻击作为提示注入来处理，而是将其作为一类独特的恶意软件执行机制来处理，我们将其称为提示件，并介绍其七步杀伤链。（2）我们回顾了三十六起广为人知的事件，并表明在三年间，针对生产环境中 LLM 应用的攻击发生了显著演变，从最初仅涉及杀伤链的三个阶段（初始访问、权限提升和达成目标行动），发展到近期事件中涉及五个阶段。（3）我们讨论了 LLM 应用的深度安全，其范围超越了针对越狱和提示注入的缓解措施，延伸至针对杀伤链中其余尚未被应对步骤的缓解措施。</p>
+<h2>II. PROMPTWARE: PROMPT-INITIATED MALWARE</h2>
+<p>提示注入（prompt injection）于 2022 年 9 月首次成为安全领域的关注点 [1], [2], [3]。该术语的提出是类比 SQL 注入，反映了两者之间显而易见的相似之处：受信任与不受信任的输入被拼接在一起，随后由执行引擎加以解释 [2], [19]。最初，提示注入在很大程度上被视为一种新颖的输入操纵漏洞，主要使攻击者能够影响或覆盖聊天机器人的响应 [1], [2], [3]。</p>
+<p>然而，此后不久发表的研究表明，提示注入的影响远不止于操纵聊天机器人的响应。具体而言，研究显示：（1）提示注入不仅可以借助自然语言文本实施，还可以通过编码文本以及将提示嵌入图像 [20] 和音频样本 [21] 中来实施；（2）提示注入可以滥用应用程序的权限、工具和暴露的 API，从而实现多种类别的恶意软件，包括间谍软件（例如，未经授权地流式传输用户的视频 [6]）、信息窃取器（infostealer）[5]、蠕虫 [7]、木马 [5]、加密货币窃取器（crypto-stealer）[22]，以及在带有可访问 shell 工具的 LLM 应用中实现远程代码执行（RCE）[8]。</p>
+<p>表 I 将提示注入与其他三类代码注入家族进行了比较：针对操作系统 shell 的命令注入、针对数据库的 SQL 注入，以及针对解释器和虚拟机的脚本注入。该比较涵盖十个维度，包括注入语言、相关模态、目标层、根本原因、执行机制、结果的确定性、运行时环境、被攻陷空间、影响范围（blast radius，即潜在受影响方）以及所导致的结果。</p>
+<p>表 I 突出了 SQL 注入与提示注入之间的显著差异，尤其是在结果、影响范围和被攻陷空间方面。SQL 注入通常仅局限于数据库层面的结果，影响范围相对有限；而提示注入则可能催生种类繁多的恶意软件，具体取决于应用程序的权限、可用的 API 以及集成的工具。因此，英国国家网络安全中心（NCSC）强调&quot;提示注入不是 SQL 注入&quot;，并将提示注入描述为&quot;被危险地误解了&quot; [23], [24]。</p>
+<figure><img src="assets/a228/figures/fig_1.png" alt="Fig. 1. Promptware杀伤链" loading="lazy"></figure>
+<figcaption>Fig. 1. Promptware杀伤链</figcaption>
+<h2>Prompt injection = SQL injection</h2>
+<p≯</p>
+<p>链中，规避贯穿于杀伤链的其他步骤之中。我们在相关步骤中讨论规避。</p>
+<p>将提示注入与 SQL 注入相类比的主流观点，低估了提示注入潜在后果的严重性与广泛性。提示注入可以充当一种由提示发起的恶意软件执行机制，从而实现种类广泛且具有多态性的恶意行为。</p>
+<p>值得注意的是，表 I 中的对比显示，尽管提示注入与操作系统（OS）命令注入在若干属性上存在实质性差异，但提示注入与脚本注入具有若干重要共性。这些共性包括：被攻陷的应用层执行上下文、潜在的广泛影响半径（blast radius），以及可能升级为远程代码执行的后果。因此，我们提出 promptware 这一术语，用以表示利用应用程序大语言模型（LLM）、由提示发起的恶意软件。我们明确将传统软件漏洞利用（例如启用 LLM 的应用程序中依赖内存破坏的缓冲区溢出）排除在 promptware 的定义之外。此类攻击并非由提示发起，也不利用 LLM 本身来实施恶意行为，尽管它们最终可能导致类似的后果。</p>
+<h2>Promptware: Prompt-initated Malware</h2>
+<p>Promptware 是指一类经过精心设计、行为方式类似恶意软件的多态提示（polymorphic prompts），它通过滥用应用程序的上下文、权限和功能，利用 LLM 执行恶意活动。从本质上讲，promptware 是一种输入——无论是文本、图像还是音频——它会在推理阶段操纵 LLM 的行为，从而攻击应用程序或用户。</p>
+<h2>III. THE PROMPTWARE KILL CHAIN</h2>
+<p>在确立了 promptware 是一种由提示发起的恶意软件执行机制之后，我们现在讨论其杀伤链（kill chain）的七个步骤（见图 1）：（1）初始访问（Initial Access，提示注入）、（2）权限提升（Privilege Escalation，越狱）、（3）侦察（Reconnaissance）、（4）持久化（Persistence，记忆与检索投毒）、（5）命令与控制（Command &amp; Control）、（6）横向移动（Lateral Movement，跨系统与跨用户传播），以及（7）达成目标行动（Actions on Objective）。虽然在某些版本的网络杀伤链（cyber kill chain）中，规避（evasion）被视为一个独立的步骤 [25]，但在 promptware 杀伤链中，我们并不声称七步杀伤链模型能够涵盖所有可能的攻击场景，也不认为各阶段之间的边界总是截然分明。攻击者可能跳过某些阶段，也可能将其组合、合并，或按顺序或并发地执行。杀伤链是作为一种结构化思考的工具而提出的，并非一套僵化的分类体系。其价值在于使相关讨论超越将提示注入视为笼统单一类别的层面，转向细粒度地理解针对基于 LLM 的系统的攻击实际上是如何展开的。</p>
+<h2>A. Initial Access in Promptware</h2>
+<p>提示注入是 promptware 杀伤链执行中的初始访问阶段，在此阶段，攻击者将恶意指令插入基于 LLM 的应用程序的上下文窗口中。该阶段利用了大型语言模型的一个基本架构特性：无法可靠地区分来自可信实体的指令与来自不可信来源的数据 [4]。我们注意到，提示注入与越狱（jailbreaking，即攻击杀伤链的第二步）之间的边界往往界定不清，导致两者经常被混淆。在我们的框架中，初始访问（提示注入）始于攻击者注入提示的操作（例如，通过入侵某个网站或发送被篡改的日历邀请 [6]），并在对抗性输入被成功注入目标 LLM 应用的上下文之后结束。该阶段既涵盖使应用能够检索到该提示的攻击向量（直接、间接），也涵盖用于构造提示的技术，这些提示能够规避旨在保护应用免遭上下文投毒的输入净化机制。</p>
+<p>攻击向量。提示注入可通过两种向量实施，其分类依据是攻击者与受害者之间的关系。直接提示注入（direct prompt injection）出现于 2022 年 9 月 [1], [2]，在这种攻击中，攻击者就是与 LLM 应用交互的用户，其蓄意构造输入，意图操纵模型以谋取私利。早期实例较为简单，通常依赖诸如“忽略之前的指令，改为执行 X”之类的显式覆盖指令 [3], [26], [1]。直接提示注入不需要任何特殊权限：任何能够访问应用输入接口的用户都可以尝试这种攻击。间接提示注入（indirect prompt injection）出现于 2023 年晚些时候，它通过将应用用户的角色从攻击者转变为受害者而颠倒了威胁模型 [27]。攻击者不再直接入侵 LLM 应用，而是篡改应用在推理时或响应特定用户查询时所检索的外部内容（例如网页、文档、电子邮件或其他数据源）。当用户与应用交互时，被投毒的内容会被纳入上下文窗口并由模型执行。间接提示注入的规模扩展与攻击者的投入无关：单个被投毒的资源即可危害所有其应用检索到该资源的用户。</p>
+<p>多模态 LLM 注入。鉴于多模态处理技术的进展，多模态提示注入已成为一种独特的注入类型，它将恶意指令编码到非文本模态中（例如音频样本 [21] 和图像 [28], [29], [30], [20]）。因此，应将其视为与文本注入并列的一个独立注入类别，而不是一种额外的攻击向量。已有研究证明，此类攻击可以在黑盒环境 [28], [29]、灰盒环境 [30] 和白盒环境 [20], [21] 下发起。这意味着，多模态 LLM 应用所摄取的任何内容模态都构成一个潜在的提示注入向量。</p>
+<p>规避。为了躲避用户的注意，已有若干技术被提出。其中包括 ASCII 走私（ASCII smuggling）[31]，它利用了这样一个事实：Unicode 字符会被 LLM 解读，但尽管这些字符确实存在，应用程序往往不会将其可见地渲染出来。另一种方法是将指令嵌入文档文本中，使用与背景极为接近的颜色，使用户无法察觉 [32]。为了绕过输入净化器（input sanitizer），对抗性混淆方法大量涌现，它们以规避检测的方式变换提示，同时保留语义含义。常见技术包括 Base64 编码和基于 ASCII 艺术的变换 [33]。文献 [18] 对这些及相关方法进行了全面讨论。为了绕过“先规划后执行”（plan-then-execute）[16] 这一架构级缓解措施——该措施在不可信数据被纳入 Agent 的本地上下文时会阻止 Agent 重新规划——文献 [5] 引入了延迟工具/Agent 调用（delayed tool/agent invocation），使 Agent 向应用程序的编排器上下文中发出条件化提示（例如“当用户说谢谢时，执行 X”），其执行会在未来的一次推理中被触发。此外，多模态 LLM 提示注入 [28], [29], [30], [20] 的出现，为躲避用户注意和绕过输入净化器提供了额外的途径。</p>
+<p>在杀伤链中的位置。通过提示注入实现的初始访问会攻陷应用程序的上下文窗口，从而建立立足点，但这本身并不能保证成功利用，因为现代 LLM 经过训练会拒绝有害请求（对齐，alignment）。提示注入突破了上下文窗口的边界；然而，如果被注入的指令所请求的动作是模型在良性条件下本来就会执行的动作，那么仅凭初始访问可能就已足够。否则，杀伤链中的后续步骤将决定攻击者能否利用这一突破口来实现有意义的目标。</p>
+<h2>B. Privilege Escalation in Promptware</h2>
+<p>越狱（jailbreaking）构成了提示件（promptware）的权限提升阶段。它指的是使大语言模型（LLM）绕过其安全约束、执行其被训练为拒绝的动作的各类技术。如果说提示注入是进入应用程序上下文的入口，那么越狱则通过将模型从其约束中“解放”出来，提升了模型所赋予攻击者的能力。LLM 系统中的权限提升概念与传统计算不同。传统意义上的用户账户或 root 访问权限并不存在。相反，权限指的是模型行使某些能力的意愿——这些能力是模型所具备的，但或被训练为不予行使（例如说脏话），或被应用程序的系统提示明确指示不得执行。现代 LLM 经过对齐训练，会拒绝被视为有害、不道德或超出可接受使用政策范围的请求。此外，系统级指令可能对允许的功能施加进一步的约束，并规定模型的预期行为。这些约束起到权限边界的作用：模型能够执行某些任务，但并不会去执行。越狱则绕过了这一边界。</p>
+<p>提示注入与越狱是经常被互换使用的两个术语，但它们代表的是攻击中不同的步骤。我们将提示注入和越狱视为统一杀伤链中两个不同的步骤。提示注入实现初始访问，即将攻击者控制的指令插入 LLM 的上下文中。越狱实现权限提升，即绕过安全或能力边界——即便相关指令已存在于上下文中，该边界原本也会阻止这种不良行为。两者常常同时出现。一次提示注入可能携带一个在被检索时触发的越狱载荷，但二者在概念上是截然不同的。</p>
+<p>越狱技术的演进。早期越狱主要依赖指令覆盖（instruction-overriding）技术，这类技术利用模型的指令遵循行为，通过指示 LLM “忽略先前的指令”（&quot;ignore previous instructions&quot;）来显式地试图覆盖系统级策略 [1], [26]。这些攻击依赖于系统指令与用户指令之间幼稚的优先级冲突。后续技术转向了基于社会工程的方法，利用基于人设（persona）的攻击和角色扮演攻击来操纵 LLM，使其采用被框定为不受安全约束、可以“做任何事情”的替代身份或虚构情境 [34], [14]。2023 年，一种新技术提出了通用越狱（universal jailbreaking）的概念 [35]，证明了对抗性后缀（adversarial suffixes）的存在，这些后缀可泛化到多个 LLM 上，从而实现很大程度上与模型无关的利用。后续工作通过引入基于格式的混淆技术（如基于 ASCII 艺术的提示 [33]）以及多轮越狱策略进一步扩大了攻击面，后者通过在长时间交互中逐步塑造模型的行为来规避单轮安全机制 [36]。[12], [13], [14] 提供了越狱技术的全面综述。</p>
+<p>在杀伤链中的位置。越狱是 promptware 杀伤链的第二步，包含旨在改变模型上下文、使安全约束不再适用的各类技术。任何特定越狱的有效性都会随时间推移而下降，因为厂商会不断更新其模型和过滤器，但其底层漏洞——即安全训练和缓解措施可能被足够对抗性的输入绕过——依然存在。越狱在已被攻陷的 LLM 上下文中提升攻击者的权限。成功的越狱是使杀伤链后续步骤得以实施的关键。</p>
+<h2>C. Reconnaissance in Promptware</h2>
+<p>在经典的高级持续性威胁（APT）杀伤链 [25] 中，侦察由攻击者在攻陷目标之前执行，以识别对目标实施初始访问的可行向量。相比之下，promptware 中的侦察发生在初始访问已经达成之后（且在 LLM 已被解除其约束之后），并由提示本身执行，而非由攻击者直接执行。侦察用于在推理时通过就其上下文探测宿主应用的 LLM，来确定如何沿杀伤链推进。promptware 可以利用 LLM 的推理能力以及作为输入提供的上下文数据来动态推断后续步骤和目标，即使目标应用的架构事先未知，例如，当提示通过被攻陷的网站注入到一个身份最初未知的应用中时。通过在推理期间就可用上下文查询 LLM，promptware 可能发现有关宿主环境的关键信息，包括暴露的数字资产（例如文件）、可访问的 Agent（例如终端）、持久化通道的存在（例如数据库），以及可由应用触发的恶意操作 [37]。</p>
+<p>在杀伤链中的位置。侦察可能依赖多步推理来确定如何沿杀伤链继续推进（在图 1 中被可视化为一个圆圈）；然而，它并非强制性步骤。在许多 promptware 攻击中，杀伤链的后续步骤会在针对特定目标应用进行提示工程时被静态地预先确定，从而无需此步骤。</p>
+<h2>D. Persistence in Promptware</h2>
+<p>持久化（Persistence）是指使恶意指令能够在单次推理之外继续存续、并在与 LLM 的不同会话之间维持被投毒立足点的技术。如果没有持久化，攻击者必须在每次交互时重新注入载荷：这一约束同时限制了可扩展性和影响力。我们根据恶意载荷被重新激活的方式区分两种持久化形式。</p>
+<p>检索依赖型持久化（Retrieval-Dependent Persistence）是指恶意指令在外部数据存储中保持休眠，直到被应用程序的检索机制取回并重新引入 LLM 上下文的情形。对抗性提示并非通过显式记忆或会话状态来持久化，而是驻留在被应用程序反复查询的长期存续数据源（例如文档、电子邮件 [7]、日历邀请 [6]）之中。当被投毒的内容被检索到时（例如通过检索增强生成（RAG）流水线、语义搜索或基于工具的数据获取），恶意载荷便被重新注入应用上下文并执行。这种持久化形式之所以被视为“依赖型”，是因为其重新激活取决于被投毒资源与应用程序或用户所发出查询的相关性。</p>
+<p>检索无关型持久化（Retrieval-Independent Persistence）代表一种更强的持久化形式，其目标是应用程序的内部长期记忆，而非外部数据存储。例如 Gemini 中的“已保存信息”（saved information）或 ChatGPT 中的“记忆”（memories），它们允许将用户提供的内容持久地纳入模型上下文，贯穿其后的所有交互。当此类记忆内容被攻击者投毒后，被投毒的内容会影响所有后续交互，而无需语义相似性或显式检索，从而构成独立持久化。</p>
+<p>在杀伤链中的位置。持久化将 promptware 从一种瞬时性利用转变为一种持久性植入体。检索依赖型持久化提供的是概率性的重新激活；检索无关型持久化则保证重新激活。启用杀伤链的下一步（C2）需要持久化，而杀伤链中的其余步骤则无需持久化即可实现。</p>
+<h2>E. Command and Control</h2>
+<p>命令与控制（C2）建立一条用于持续远程控制的信道，使攻击者能够随时间推移更新载荷并修改 Agent 行为。这一阶段仅在以下情况下才可行：(1) 已实现持久化；没有持久化的立足点，便无法对应用实现持续控制；以及 (2) 大语言模型（LLM）应用会从互联网获取不受信任的数据（攻击者的指令）。C2 将 promptware 从一种其行为在注入时即已固定的静态、预编程威胁，转变为一种有效载荷在推理时才确定的、可动态控制的木马。动态载荷修改代表了持久化阶段的顶点：被攻陷的 LLM 应用不再仅仅是被感染，而是被远程操控。此类应用可以在每次推理的基础上调整其目标。</p>
+<p>在杀伤链中的位置。没有先前的持久化步骤，C2 便无法启用；然而，C2 本身并非杀伤链的强制阶段。杀伤链的其余阶段可以在不建立 C2 的情况下执行。</p>
+<h2>F. Lateral Movement in Promptware</h2>
+<p>横向移动（lateral movement）是指 promptware 从其初始攻陷点向更多 agent、用户、应用或系统传播的技术。传统恶意软件通过网络利用、凭据窃取或滥用系统间信任关系来实现横向移动，而 promptware 则利用 LLM 应用固有的连接性，包括共享数据存储、消息传递通道以及通常授予 AI agent 的广泛权限。传播可以沿若干正交维度加以刻画：所跨越的边界（例如跨 agent、跨用户、跨应用、跨设备）、所利用的通道（例如共享内容、通信通道、数据管道）以及所采用的机制（例如自我复制、权限滥用、管道遍历）。我们依据所跨越的边界对传播进行分类。</p>
+<p>设备内横向移动发生在单一设备内部。一种形式是同一 LLM 应用内的跨 agent 横向移动，即某个 agent 对应用编排器（orchestrator）上下文的攻陷会导致另一个 agent 被执行。另一种形式是跨应用横向移动，即被攻陷的 agent 利用授予 LLM 应用的提升的操作系统级权限，在同一设备上触发其他应用 [6]。</p>
+<p>设备间横向移动发生在 LLM 生态系统内的设备或客户端之间。当同一应用的多个客户端（例如由 LLM 驱动的电子邮件助手）共享一个由 LLM 介导的通信通道时，便可能出现跨客户端横向移动。在这种情况下，被攻陷的提示可以诱导 LLM 通过自我复制将恶意指令的副本嵌入外发内容中，从而感染其他客户端 [7]。设备间横向移动还可以跨应用发生：当某个应用被迫输出、发布或存储被投毒的数据，而这些数据随后又被另一个 LLM 应用消费时，便会出现这种情况。当各应用共享数据库或存储库，或参与多阶段管道（其中一个 LLM 的输出成为另一个 LLM 的输入）时，这种情况尤其可能发生 [38], [39]。设备间横向移动将提示注入攻击每次恶意操作的有效感染率从 1:1 转变为 1:n。换言之，一次成功的提示注入即可横向传播并攻陷多个系统。</p>
+<p>在杀伤链中的位置。横向移动扩大了 promptware 的爆炸半径，使其影响在初始访问点之外在规模或严重程度上进一步升级。它强调了 LLM 应用的安全影响会延伸到与其直接交互的系统和应用。</p>
+<h2>G. Actions on Objective in Promptware</h2>
+<p>目标行动（Actions on Objective）构成 promptware 杀伤链的最后阶段，刻画了攻击者最终实现的恶意结果。这些结果定义了通过 promptware 实例化的恶意软件的功能类别。promptware 目标行动的范围和严重程度取决于宿主应用程序的权限、集成和自动化能力，以及被攻陷的 LLM 应用程序可访问的工具。</p>
+<p>违禁信息获取。早期针对聊天机器人的 promptware 攻击主要旨在胁迫模型产生其经训练而拒绝生成的输出，例如有关非法活动的指导（如炸弹制造）或辱骂性语言。虽然这些攻击暴露了对齐和指令遵循方面的弱点，但其安全影响有限，因为此类信息通常可以通过其他渠道（如暗网）获取。在这些情况下，LLM 主要充当一种更便捷的接口，而非带来根本性的新攻击能力。</p>
+<p>数据外泄。Simon Willison 将 LLM 应用程序中数据外泄的三个前提条件概括为“致命三要素”（Lethal Trifecta）：暴露于不可信输入、能够访问敏感数据，以及具备对外通信的能力 [40]。当这三个条件全部满足时，promptware 可以表现为信息窃取器（info-stealer）[7], [5], [39] 或间谍软件（spyware）[6]。</p>
+<p>网络钓鱼与社会工程学。promptware 可以利用 LLM 应用程序对通信渠道的访问权限，促成极为有效的网络钓鱼和社会工程学攻击。攻陷 LLM 驱动的电子邮件助手后，攻击者能够生成以受害者账户为发件来源并模仿受害者写作风格的消息。类似地，被攻陷的助手可被用来通过内部消息平台传播恶意链接 [39]。从接收者的角度来看，这些消息与合法通信无法区分。</p>
+<p>物理影响。当 LLM 应用程序控制执行器或与之交互时，例如控制智能家居设备（如联网的窗户、照明或供暖系统）[6]，或当 LLM 被嵌入信息物理系统（cyber-physical systems，如人形机器人）中时，promptware 可以产生物理世界的影响。在这种情况下，攻击面扩展到被攻陷的应用程序被授权执行的任何物理动作。</p>
+<p>金融影响。当 promptware 以 LLM 驱动的交易系统为目标时，可能造成金融损害，例如电商聊天机器人（如汽车经销商助手 [41]）或 AI 驱动的加密货币交易 Agent（如以太坊盗窃事件 [42]）。更广泛地说，当 LLM 应用程序被授权发起或修改金融交易时，promptware 可以充当加密货币窃取器（crypto-stealer）或电商窃取器（e-commerce skimmer）。</p>
+<p>远程代码执行（RCE）。最严重的一类后果出现在能够访问终端和代码解释器的智能体（agentic）系统中。通过操纵此类系统执行攻击者提供的代码，promptware 可以有效地实现远程代码执行，并能通过任意代码执行部署各类恶意软件，包括加密货币挖矿程序、勒索软件、木马或其他恶意软件。RCE 尤其危险，因为它可能启动一条与 promptware 杀伤链无关的新杀伤链（例如，RCE 可被用作高级持续性威胁（APT）杀伤链的初始访问或持久化机制）。</p>
+<p>在杀伤链中的位置。目标达成（Actions on Objective）代表攻击者的最终目标，并决定 promptware 最终表现为信息窃取器、间谍软件、加密货币窃取器还是其他恶意软件变体。这些后果的严重程度受被攻陷应用的能力所限制。</p>
+<h2>IV. KILL CHAIN ANALYSIS FOR KNOWN INCIDENTS</h2>
+<p>我们分析了2023年2月至2026年1月期间的36起有记录的事件和研究（见表 II）。此外，我们在附录 A 中展示了对表中两个测试案例的全面分析。</p>
+<h2>A. Evolution of The Kill Chain Coverage</h2>
+<p>当我们按日期排列这些事件时，一种模式浮现出来：杀伤链（kill chain）覆盖范围随时间推移稳步扩大，攻击从简单的两阶段利用演变为贯穿杀伤链五个步骤的攻击活动。</p>
+<p>1) 早期阶段：2023年：自2022年9月提示注入（prompt injection）问世以来，最早的攻击仅具有极小的杀伤链覆盖范围。在2023年期间，攻击通常仅涉及两到三个阶段，涵盖初始访问（Initial Access）、权限提升（Privilege Escalation）和目标达成（Actions on Objective）。这一时期的三起事件分别针对浏览器与搜索AI（两起）和多模态系统（一起）。2023年2月，Greshake等人通过被投毒的网页演示了针对Bing Chat和GPT插件的间接提示注入[43]。这是一次三阶段攻击，其中间接提示注入与指令覆盖相结合，直接导致了数据外泄。2023年6月，Rehberger等人遵循相同的模式，演示了从Bing Chat进行的类似数据外泄[44]。2023年10月针对GPT-4V的视觉提示注入演示[45]通过图像中的隐藏文本引入了多模态攻击向量，但仍局限于两个阶段。</p>
+<p>2023年的所有事件均未展示出侦察（Reconnaissance）、持久化（Persistence）、命令与控制（C2）或横向移动（Lateral Movement）能力。</p>
+<p>2) 扩展阶段：2024年：2024年，研究人员开始演示具有更广杀伤链覆盖范围的攻击，其中包括首次出现的持久化、侦察和横向移动实例。这一时期的十二起事件呈现出类别上的多样化：企业AI工具（两起）、浏览器与搜索AI（四起）、AI蠕虫（两起）、智能体型与计算机使用类Agent（一起）、AI Agent（一起）、多模态（一起）以及加密货币/DeFi（一起）。</p>
+<p>AI蠕虫与横向移动。2024年3月的Morris II蠕虫[7]首次演示了五阶段攻击，其中包括通过基于电子邮件的注入实现初始访问，通过角色扮演越狱实现权限提升，通过依赖RAG的电子邮件数据库存储实现持久化，以及通过自我复制实现横向移动。该蠕虫自动将自身的副本嵌入外发电子邮件中，以传播到新的受害者。同年10月的Prompt Infection演示[49]展示了多智能体系统中的跨Agent传播。这两起事件确立了AI蠕虫作为一类具有相对较高杀伤链覆盖范围的攻击。</p>
+<p>首个Promptware原生C2。2024年10月的ChatGPT ZombAI演示[48]实现了首个promptware原生的命令与控制能力。通过在ChatGPT的记忆中存储指令，指示其反复从GitHub issues获取更新的命令，该攻击展示了对被攻陷ChatGPT实例的动态远程控制，标志着从静态记忆投毒向动态的、推理时攻击者控制的转变。</p>
+<p>企业 AI 工具。到 2024 年年中，针对企业 AI 工具的攻击开始出现。2024 年 8 月的 Slack AI 数据渗出攻击 [46] 与 M365 Copilot ASCII 走私攻击 [47] 展示了针对企业系统的四阶段链，并通过消息、电子邮件和文档等工作区工件建立了依赖检索增强生成（RAG）的持久化。</p>
+<p>首次侦察演示。2024 年 8 月的 APwT 演示 [37] 首次明确展示了侦察阶段，其中 promptware 在推理时动态探测宿主应用程序的上下文，以识别资产并确定后续行动。</p>
+<p>经济损失。这一时期还出现了首次由 promptware 造成的现实世界经济损失。2024 年 11 月，Freysa AI 盗窃事件表明，诸如扮演管理员角色之类的社会工程手段可以从 AI 控制的加密货币钱包中窃取 47,000 美元 [52]。</p>
+<p>记忆植入体在我们的分类体系中并未作为一个单独的类别出现，但它们提供了一种贯穿各个类别的重要持久化机制。我们数据集中的两起事件（2024 年 9 月的 ChatGPT SpAIware 攻击 [5] 和 Windsurf SpAIware [63]）展示了通过记忆功能实现的与检索无关的持久化：一旦 promptware 被写入长期记忆，其指令便会被注入到随后的每一次交互中，而无论用户查询或文档上下文如何。这两起攻击均未达到 5 个或更多杀伤链阶段，但二者都通过将一次性提示注入转变为可跨会话存活的持久植入体，延长了入侵的持续时间并提升了隐蔽性。</p>
+<p>在 2024 年记录的 12 起事件中，5 起展示了持久化，3 起展示了横向移动，2 起达到了 5 个杀伤链阶段。</p>
+<p>3) 成熟期：2025-2026：2025-2026 年这一时期展现出：攻击常规性地达到 4 个或更多阶段、promptware 原生命令与控制（C2）能力的出现，以及针对 AI 编程助手的攻击。这 21 起事件涵盖企业 AI（6 起）、编程助手（7 起）、浏览器与搜索 AI（2 起）、agentic 与 computer-use Agent（3 起）、AI 蠕虫（1 起）以及 AI Agent（2 起）。</p>
+<p>AI 编程助手。一个显著趋势是 AI 编程助手正日益成为攻击目标——因为它们具备代码执行能力并能访问敏感凭证——此类攻击占该时期 21 起事件中的 7 起。GitHub Copilot 远程代码执行（RCE）漏洞（CVE-2025-53773）[61] 展示了一条以远程代码执行告终的四阶段链。类似的攻击在 Cursor 上通过 CurXecute [57] 和 AgentFlayer [38] 得到演示，在 Windsurf [63] 上也有演示。Trail of Bits 的演示 [62] 表明，提示注入可使 Copilot 在能够通过人工代码审查的软件项目中插入后门。AgentFlayer 达到了 5 个阶段，包括基于流水线的横向移动——这是迄今为止唯一达到这一杀伤链覆盖水平的编程助手攻击。</p>
+<p>企业 AI 利用。企业 AI 工具占二十一起事件中的六起，且攻击正变得日益精密复杂。针对 Google Gemini Enterprise 的 GeminiJack 漏洞 [65] 展示了零点击利用：仅共享一个 Google Doc 或日历邀请便会触发数据外泄。针对 Salesforce Agentforce 的 ForcedLeak 攻击 [58] 表明，攻击者只需花 5 美元购买过期的白名单域名即可外泄客户关系管理（CRM）数据。两起企业攻击达到了五个阶段：ZombieAgent [67]（将独立于检索的持久化与自我复制相结合）和 Reprompt [69]。</p>
+<p>Agentic AI 与计算机使用 Agent。Agentic 与计算机使用类 Agent 占二十一起事件中的三起。</p>
+<p>表 II</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th></tr></thead><tbody>
+<tr><td>Mov. Action on Obj.</td><td>Data exfil., fraud Data exfiltration Response manip. Harmful content Data exfil., spam DoS, SQL table modification Private ch. exfil. MFA code exfil. Persistent exfil. Data exfil Cross-agent Saturation RCE, malware C2 conn. XSS, account takeover Transfer funds Output manipulation Exfil of conversations Zero-click exfil. Secret exfil. RCE via MCP CRM data exfil. IoT manip., surv. RCE, malware C2 (Sliver) Service exposure RCE ch. Backdoor insertion Credential exfil. Gmail exfil., phish Persistent exfil. Phishing, data theft Corporate data exfil. propag. Exponential spread RCE Data exfiltration File exfiltration Continuous exfil. HR data exfil.</td></tr>
+<tr><td>C2 Lat.</td><td>- - - - - - - - - Self-rep - Perm - - - - - - ✓ - - - - - - - - - - - - - - - - - - - - - Perm - - - Perm - - - Supply - Pipeline - Cross-app - - - - - - - Git - Perm - Self-rep - - ✓ - - -</td></tr>
+<tr><td>Recon. Persist.</td><td>- - - - - - - - - RAG-dep ✓ - - RAG-dep - RAG-dep - RAG-indep - RAG-indep - - - - - - - - - - - - - RAG-dep - - - RAG-indep - RAG-dep - RAG-dep - - - - - RAG-indep - - - RAG-dep - RAG-dep - RAG-indep - - - RAG-dep - Git repo - - - RAG-indep - - - Session -</td></tr>
+<tr><td>Priv. Esc.</td><td>Instr. override Instr. override - Semantic bypass Role-play JB Role-play JB Instr. override Auto tool inv. Instr. override Instr. override Instr. override Instr. override Control bypass Tool confusion - Control bypass Auto RAG mix Control bypass Approval bypass Instr. override Delayed tool inv Control bypass Control bypass Control bypass Instr. obfusc. Instr. obfusc. Instr. override Instr. override - Zero-click RAG Control bypass Control bypass Control bypass Control bypass Control bypass Control bypass</td></tr>
+<tr><td>Initial Access</td><td>Poisoned webpage Poisoned webpage Image (hidden text) ASCII art encoding Received email Direct prompt Public channel msg Malicious email Browsed webpage Browsed webpage Webpage/PDF/Email Visited webpage Direct prompt Direct message Hidden text on webpage Malicious MCP server Markdown email Untrusted repo content Slack/GitHub msg Web-to-Lead form Calendar invite Browsed website Untrusted content Code/issue/webpage GitHub issue Jira ticket GitHub issue Source code URL fragment Doc/Cal/Email Git repository Visited webpage Received email/file Skill file (.docx) URL q-parameter Uploaded doc</td></tr>
+<tr><td>Target</td><td>Bing Chat, plugins Bing Chat GPT-4V GPT-4, Claude Email assistants GenAI-powered app Slack AI M365 Copilot ChatGPT ChatGPT Multi-agent sys. Claude Comp. Use DeepSeek AI web app Freysa AI agent ChatGPT Search MCP-based agents M365 Copilot GitHub Copilot Cursor SF Agentforce Google Assistant Devin Devin GitHub Copilot GitHub Copilot Cursor Perplexity Comet Windsurf AI browsers Google Gemini AI code assist. Claude Comp. Use ChatGPT Claude Cowork Microsoft Copilot Notion AI</td></tr>
+<tr><td>Category</td><td>Browser/Search Browser/Search Multimodal Multimodal AI Worm AI Agent Enterprise Enterprise Browser/Search Browser/Search AI Worm Agentic/CUA Browser/Search Crypto/DeFi Browser/Search Coding Assist. Enterprise Coding Assist. Coding Assist. Enterprise Agentic/CUA AI Agent AI Agent Coding Assist. Coding Assist. Coding Assist. Browser/Search Coding Assist. Browser/Search Enterprise AI Worm Agentic/CUA Enterprise Agentic/CUA Enterprise Enterprise</td></tr>
+<tr><td>Date</td><td>For [43] Feb&#x27;23 Jun&#x27;23 [45] Oct&#x27;23 Feb&#x27;24 Mar&#x27;24 Aug&#x27;24 Aug&#x27;24 [47] Aug&#x27;24 Sep&#x27;24 Oct&#x27;24 Oct&#x27;24 Oct&#x27;24 Nov&#x27;24 Nov&#x27;24 Dec&#x27;24 Apr&#x27;25 Jun&#x27;25 Jun&#x27;25 Jul&#x27;25 Jul&#x27;25 [6] Aug&#x27;25 Aug&#x27;25 Aug&#x27;25 Aug&#x27;25 Aug&#x27;25 Aug&#x27;25 Aug&#x27;25 Aug&#x27;25 Nov&#x27;25 Dec&#x27;25 Dec&#x27;25 Dec&#x27;25 Jan&#x27;26 Jan&#x27;26 Jan&#x27;26 Jan&#x27;26</td></tr>
+<tr><td>Study/Incident</td><td>Not What You Signed Up Bing Chat Exfil [44] GPT-4V Visual Injection ArtPrompt [33] Morris II Worm [7] APwT [37] Slack AI Exfil [46] M365 ASCII Smuggling ChatGPT SpAIware [5] ChatGPT ZombAI C2 [48] Prompt Infection [49] ZombAIs Claude C2 [50] DeepSeek ATO XSS [51] Freysa AI Heist [52] ChatGPT Search [53] MCP History Theft [54] EchoLeak [55] CamoLeak [56] CurXecute [57] ForcedLeak [58] Invitation Is All You Need Devin AI RCE [59] Devin expose port [60] GitHub Copilot RCE [61] Copilot Backdoor [62] AgentFlayer [38] IdentityMesh [39] Windsurf SpAIware [63] HashJack [64] GeminiJack [65] AgentHopper [66] Agentic ProbLLMs [8] ZombieAgent [67] Claude Cowork [68] Reprompt Attack [69] Notion AI Exfil [70]</td></tr>
+</tbody></table></div>
+<p>| 0                   | 1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |</p>
+<figcaption>针对已知事件/研究的Promptware杀伤链分析</figcaption>
+<p>针对 Google Assistant 的&quot;Invitation Is All You Need&quot;攻击 [6] 表明，日历邀请可以通过 Zoom 触发物联网（IoT）操纵与隐蔽监视，实现了包含持久化与横向移动的五阶段链。Agentic ProbLLMs 演示 [8] 表明，Claude Computer Use 应用可以通过四阶段链被攻陷，从而获得系统访问权限。</p>
+<p>AI 蠕虫。AgentHopper 演示 [66] 将蠕虫能力扩展到 AI 编码助手，利用 git 仓库同时实现持久化与传播。纵观所有时期，AI 蠕虫在所有类别中表现出最高的杀伤链覆盖：三起中有两起达到了五个阶段。</p>
+<p>经由远程代码执行（RCE）实现的命令与控制（C2）与持久化。在我们调查的三十六起 promptware 事件中，只有两起实现了我们框架中所定义的 promptware 原生 C2 阶段：2024 年 10 月的 ChatGPT ZombAI 攻击 [48]，以及 2026 年 1 月针对 Microsoft Copilot 的 Reprompt 攻击 [69]。ChatGPT ZombAI 通过存储记忆指令实现了 C2，这些指令指示 ChatGPT 反复从攻击者控制的 GitHub issue 中获取更新后的命令。Reprompt 将会话范围的持久化与链式请求机制相结合，其中 Copilot 反复从攻击者控制的服务器获取新的提示，使攻击者能够在推理时动态地为被攻陷的会话重新指派任务。</p>
+<p>其他几起事件也实现了 C2 与持久化，但其方式是先获得 RCE，然后回退到传统的二进制级基础设施。例如，ZombAIs [50] 和 Devin AI RCE [59] 利用提示注入触发代码执行，随后由传统恶意软件植入体（如 Sliver）在主机上同时建立 C2 通道和持久立足点。在这些案例中，大语言模型（LLM）仅充当初始访问向量；C2 环路与持久化机制完全在提示层之外运行。</p>
+<p>在 2025-2026 年的二十一起有记录事件中，十五起展示了四个或更多阶段，6 起达到了五个阶段。另有一起事件（Reprompt）展示了 promptware 原生 C2 能力，这是继 2024 年 ChatGPT ZombAI 之后的第二次此类演示。</p>
+<h2>B. Analysis</h2>
+<p>表 III 总结了各时间段内杀伤链的覆盖情况，并揭示了若干趋势。持久化能力于 2024 年初出现，此后一直较为常见，在 2024 年的十二起攻击中出现了六起，在 2025-2026 年的二十一起攻击中出现了十二起。promptware 原生 C2 能力首次出现于 2024 年 10 月的 ChatGPT ZombAI 攻击中，展示了对被攻陷 LLM 实例的动态远程控制，并于 2026 年 1 月在 Reprompt 攻击中再次出现。横向移动已从 2023 年三起事件中的零起，增长到 2024 年十二起中的三起，再到 2025-2026 年二十一起中的八起。</p>
+<p>杀伤链覆盖已从三个阶段（2023 年三起中的两起）转变为四个阶段（2024 年十二起中的四起，2025-2026 年二十一起中的九起），使持久化和横向移动成为 promptware 攻击活动的标准组成部分。数据集中没有任何攻击实现过杀伤链的全部七个阶段；最高覆盖仍停留在五个阶段。</p>
+<div class="tablewrap"><table><thead><tr><th>Period</th><th>N</th><th>2 Stages</th><th>3 Stages</th><th>4 Stages</th><th>5 Stages</th><th>6 Stages</th></tr></thead><tbody>
+<tr><td>2023</td><td>3</td><td>1</td><td>2</td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>2024</td><td>12</td><td>1</td><td>4</td><td>4</td><td>3</td><td>0</td></tr>
+<tr><td>2025-2026</td><td>21</td><td>1</td><td>5</td><td>9</td><td>6</td><td>0</td></tr>
+<tr><td>Total</td><td>36</td><td>3</td><td>11</td><td>13</td><td>9</td><td>0</td></tr>
+</tbody></table></div>
+<p>| Period    |   N |   2 Stages |   3 Stages |   4 Stages |   5 Stages |   6 Stages |</p>
+<figcaption>TABLE III 按时间段划分的杀伤链阶段分布</figcaption>
+<h2>Kill Chain Coverage Evolution</h2>
+<p>杀伤链已在许多生产系统中得到验证。三年来，针对大语言模型（LLM）应用的攻击从仅涉及两到三个杀伤链阶段，发展到常规性地涵盖四个或更多阶段。实现四个或更多阶段的攻击数量从 2023 年的零起增加到 2024 年的七起，再到 2025-2026 年的十五起。AI 蠕虫通常表现出最高的杀伤链覆盖，其中两起达到了五个阶段。</p>
+<h2>C2 Evolution</h2>
+<p>Promptware 原生的命令与控制（C2）能力于 2024 年 10 月出现，表明攻击者能够对被攻陷的 LLM 实例建立动态的命令与控制。然而，大多数实现远程代码执行的攻击仍会退回到传统的二进制级 C2，而非提示级机制。</p>
+<h2>LLM-Assisted Exfiltration</h2>
+<p>数据外泄是最常见的目标行动。在以企业为目标的攻击事件中，一种反复出现的模式是 LLM 辅助的数据外泄，即由 LLM 读取敏感数据，并将其编码到输出中，从而绕过组织的数据外泄控制措施。</p>
+<h2>Targets and Outcome Expansion</h2>
+<p>随着 LLM 应用获得的权限和能力不断增强，攻击目标从聊天机器人等纯对话式系统，转向了 Google Assistant 等与操作系统集成的 LLM 应用，以及 AI IDE 等具备代码执行功能的基于 LLM 的系统。攻击后果也从响应操纵演变为数据外泄、远程代码执行（RCE）、物理物联网（IoT）控制以及财务损失。</p>
+<h2>V. DEFENSE-IN-DEPTH AGAINST PROMPTWARE</h2>
+<p>在本节中，我们回顾并评估针对 promptware 杀伤链各阶段的缓解措施。</p>
+<h2>A. Criteria for Assessment</h2>
+<p>为实现系统性评估，我们使用一组评估标准对每项缓解措施进行评价，这些标准刻画了防御措施在何处发挥作用、以何种方式进行干预，以及其引入的代价。我们注意到，评估按从负面（空心圆， ）到中性（半填充圆 ）再到正面（实心圆， ）的顺序排列。因此，高维护成本用 表示，而高易用性用 表示。</p>
+<p>类型（P/M/Re）。我们根据防护类型对各类对策进行分类：预防（P）——用于避免或阻止威胁的方法；缓解（M）——用于降低漏洞被利用可能性的方法；以及修复（Re）——在失陷发生后用于降低影响的方法。</p>
+<p>部署层（M/W/A/E）。我们根据缓解措施实施所在的系统层级对其进行分类。模型层防御（M）对大语言模型（LLM）本身进行修改（例如微调）。LLM I/O 封装层防御（W）对输入或输出进行中介处理（例如提示过滤）。架构层防御（A）重构系统组成或控制流（例如用户确认）。外部层防御（E）在应用循环之外运行（例如监控）。</p>
+<p>易用性影响 这是指缓解措施对系统功能造成影响的程度。低易用性影响（ ）对应于对系统功能没有影响的缓解措施，这类措施保留所有系统能力和执行路径（例如 spotlighting）。中等易用性影响（ ）表示在保留系统功能和能力的同时引入额外步骤、延迟或确认的缓解措施（例如用户确认）。高易用性影响（ ）指通过对系统行为或能力实施硬性约束来实质性限制系统功能的缓解措施（例如上下文重置）。</p>
+<p>部署成本。我们评估将缓解措施集成到现有系统所需的工程工作量。低（ ）：仅需通过提示或 I/O 中介即可部署（例如 prompt fencing）。中等（ ）：可通过在现有架构内修改 Agent 控制流来部署（例如 tool gating）。高（ ）：仅可通过架构重新设计或 Agent 重新训练来部署（例如 dual-LLM separation）。</p>
+<p>维护成本。我们评估在应用功能和攻击技术不断演进的情况下，为保持缓解措施有效性所需的持续工程工作量。低（ ）：不受新功能或攻击模式的影响（例如 prompt fencing，其依赖于固定的结构性分离）。中等（ ）：在新增系统功能时需要更新（例如 dual-LLM separation，必须加以扩展以对新工具进行中介处理）。高（ ）：在出现新攻击模式时需要更新（例如对抗训练，必须适应频繁发布的越狱策略）。</p>
+<h2>B. Mitigations Against Initial Access</h2>
+<p>提示注入净化器（prompt injection sanitizers）试图通过使用分类器、启发式规则或辅助模型检查不可信输入中是否含有对抗性内容，来减少初始访问（例如，[71]）。它作为一种概率性防护（type M）发挥作用，运行于 W 层，且通常保留系统的全部能力（可用性影响低 ）。其集成只需要输入侧的中介处理（部署工作量低 ），但其有效性依赖于对不断演化的攻击模式进行持续适应（维护工作量高 ）。这些机制也可以应用于持久化和命令与控制（C2）阶段。</p>
+<p>先规划后执行（plan-then-execute）流水线通过仅依据可信用户输入推导出完整的执行计划，并在不可信内容被摄入后按固定控制流执行该计划，从而缓解初始访问（例如，[16], [72]）。它可以防止被注入的提示调用新工具或智能体（Agent），但仍可能影响工具参数或数据载荷（type M）。它们运行于 A 层。由于固定计划降低了在动态或交互式环境中的适应性，其可用性影响为中等（ ）。由于需要重新设计智能体，部署工作量为中等（ ）；而由于新工具或新攻击不需要额外的缓解逻辑，维护工作量低（ ）。</p>
+<p>指令-数据分离（instruction-data separation）通过使用一个模型处理用户输入、使用另一个模型处理不可信内容（例如，[73]），或对数据与指令使用不同的嵌入旋转（embedding rotations）（例如，[74]），来防止初始访问。由于不可信数据以不同的方式得到处理，这些方法构成了一种运行于 A 层的 type P 防御。这种隔离限制了对话灵活性与多轮上下文共享，使得可用性影响高（ ）。由于部署需要架构上的重新设计，部署工作量高（ ）。由于新功能必须由控制器模型显式地进行中介处理，维护工作量为中等（ ）。</p>
+<h2>C. Mitigations Against Privilege Escalation</h2>
+<p>对齐（alignment）通过在训练期间让模型接触对抗性提示（例如，[75]、[35]）、指令层级（instruction hierarchy）（例如，[76]、[77]）以及任务特定微调（task-specific fine-tuning）（例如，[78]）来缓解权限提升。此类防御提升了模型的鲁棒性，但仍然是概率性的（type M），其阻碍性防护作用于 M 层。由于未引入交互变化，可用性影响低（ ）。由于部署需要重新训练或微调，部署工作量高（ ）。对于对抗训练，新攻击需要重新训练（维护工作量为高 ）。对于任务特定微调，新功能需要重新训练（维护工作量为中等 ）。指令层级不需要重新训练（维护工作量为低 ）。</p>
+<p>提示扰动（prompt perturbation）通过引入随机与防御性 token [104]、[80] 及补丁 [81]、改写（paraphrasing）[82]、提示瓶颈化（bottlenecking prompts）[83] 或回译（back translation）[84] 来增加可靠构造越狱（jailbreak）的难度，从而缓解权限提升。该技术仅提供概率性加固，而不具备结构性保证（type M）。它通过修改输入而非模型参数来运作（W 层），并且在 [80] 中还作用于 M 层。由于这些防御对用户是透明的，可用性影响低（ ）。大多数机制可通过提示进行部署，部署工作量低（ ）。例外是 [80]，其需要模型训练，工作量为中等（ ）。它与系统能力或新攻击无关；维护工作量为低（ ）。</p>
+<p>AO（ACTION ON OBJECTIVE，目标行动）。OPERAT. COST（OPERATIONAL COST，运营成本）。</p>
+<div class="tablewrap"><table><thead><tr><th>Mitigation Class..</th><th>Type..</th><th>Attack Stage.IA.IA</th><th>Attack Stage.PE RC.PE RC</th><th>Attack Stage.PR.Ret.-Dep. Ret.-Indep.</th><th>Attack Stage.C2.C2</th><th>Attack Stage.LM AO.On Device Off Device AO</th><th>Attack Stage..Model LLM I/O Arch.</th><th>Deploy. Layer..Ext.</th><th>Operat. Cost.Effort.Usability Deploy Maint. Effort</th></tr></thead><tbody>
+<tr><td>Prompt Injection Sanitizers [71]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Plan Then Execute [16]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Instruction-Data Separation [73], [74]</td><td>P</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Alignment [75], [35], [76], [77], [78]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Prompt Perturbations [79], [80], [81], [82], [83], [84]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Ensemble Oversight [85], [86]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Prompt Segmentation [87], [88], [89], [90], [91]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Structure Enforcement [92]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Dual-Stream Retrieval [93]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>User Confirmation [94]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Memory Resetting [95]</td><td>Re</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Dataset Sanitization [96]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Self-Replication Detection [7]</td><td>Re</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Least Privilege Tool Access [97]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Component Isolation [98]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Runtime Intent Validation [99]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Policy Grounding [100]</td><td>P/M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Action Sandboxing</td><td>P</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Canary Tokens [101]</td><td>Re</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Behavioral Monitoring [102]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Task-Conditioned Data Minimization [103]</td><td>M</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+</tbody></table></div>
+<p>| Mitigation Class..                                      | Type..   | Attack Stage.IA.IA   | Attack Stage.PE RC.PE RC   | Attack Stage.PR.Ret.-Dep. Ret.-Indep.   | Attack Stage.C2.C2   | Attack Stage.LM AO.On Device Off Device AO   | Attack Stage..Model LLM I/O Arch.   | Deploy. Layer..Ext.   | Operat. Cost.Effort.Usability Deploy Maint. Effort   |</p>
+<p>集成监督（ensemble oversight）通过在授权动作之前要求多个 agent 之间达成一致来缓解权限提升（例如，[85]、[86]）。这降低了权限提升的可能性，但仍易受相关失效的影响（type M），并运行于 A 层。由于 agent 之间的协调会引入延迟，可用性影响中等（ ）。由于部署需要多智能体编排（multiagent orchestration），部署工作量中等（ ）。由于系统演进需要更新，维护工作量为中等（ ）。</p>
+<p>提示分段（prompt segmentation）通过将指令与数据分段，或通过显式提醒模型其自身指令（例如，聚光（spotlighting）、指令排序（instruction ordering）、三明治提示（sandwich prompting）[87]、[88]、[89]、[90]、[91]）来缓解权限提升。该防御依赖于习得的依从性而非结构性隔离，提供概率性保护（type M）。它运行于 W 层。由于交互模式保持不变，可用性影响低（ ）。由于变更仅限于提示层面，部署工作量低（ ）。由于无需针对新攻击进行适配，维护工作量为低（ ）。</p>
+<p>结构强制（structure enforcement）通过将用户输入约束到预定义的 schema 来缓解权限提升，这些 schema 将数据字段与控制意图分离，从而降低指令歧义（例如，StruQ [92]）。它限制了混淆，但并未消除允许字段内的语义滥用（type M）。它在系统边界处通过 schema 和适配器对输入进行中介处理（A 层）。由于 schema 约束限制了表达能力，可用性影响为中等（ ）。由于必须设计和集成 schema 与中介逻辑，部署工作量为中等</p>
+<h2>D. Mitigations Against Persistence</h2>
+<p>双流检索（dual-stream retrieval）通过在相互独立的索引上并行查询，将安全关键指令与一般文档隔离开来，确保只有经过验证的内容驻留在上下文窗口中，从而缓解依赖检索的持久化（例如，[93]）。它提供的是概率性保护，因为被投毒或具有对抗性的内容仍可能进入非关键流（type M）。它重构的是检索流水线与索引分离，而非模型参数或提示（A 层）。由于交互模式和任务工作流保持不变，可用性影响为低（ ）。由于部署需要修改检索流水线，部署工作量为高（ ）。由于这种分离保证在很大程度上基于配置，维护工作量为低（ ）。</p>
+<p>用户确认（user confirmation）通过在安全关键边界处要求显式的人工批准来缓解独立于检索的持久化与目标达成行动（action-on-objective）风险，这些边界包括对长期状态的写入以及高影响操作的执行（例如，[94]）。它降低了风险，但无法防止因人为错误导致的利用（type M）。它在系统边界处的控制流中插入确认检查点（A 层）。由于确认在保留系统功能的同时引入了摩擦，可用性影响为中等（ ）。由于部署需要将确认机制集成到工作流中，部署工作量为中等（ ）。由于确认模式是稳定的，维护工作量为低（ ）。</p>
+<p>记忆重置（memory resetting）通过持续重置工作负载实例并轮换存储密钥，破坏长期对抗性状态所需的稳定环境，从而缓解持久化（例如，ADA [95]）。它限制了失陷的持续时间，但并不阻止初始注入或利用（type Re）。它在基础设施边界 E 层强制执行重置。由于频繁重置会降低连续性与会话持久性，可用性影响为高（ ）。由于部署需要基础设施集成，部署工作量为高（ ）。由于有效性不依赖于提示或攻击的演变，维护工作量为低（ ）。</p>
+<p>数据集净化（dataset sanitization）通过在检索内容集成到模型上下文窗口之前（例如，[96]）、在插入数据集之前或以离线扫描的方式对其进行过滤和约束，从而缓解持久化。它降低了下游影响（type M），并在 E 层附近的预上下文集成边界处或在 A 层的模型内部运作。由于净化对用户是透明的，可用性影响为低（ ）。由于检索输出必须经过净化逻辑的中介处理，部署工作量为中等（ ）。由于过滤器必须适应不断演变的载荷编码与规避策略，维护工作量为高（ ）。</p>
+<h2>E. Mitigations Against Lateral Movement</h2>
+<p>自我复制检测通过识别输入与输出之间符合已知复制模式的语义相似性，来缓解设备外横向移动（例如，[7]）。它仅在初始感染已经发生后才遏制蠕虫式传播（type Re）。它通过语义比较对模型 I/O 进行过滤，而非改变核心架构（W 层）。由于检测是透明的且保留了主任务的执行，可用性影响为低（ ）。由于部署仅需输出侧分析，部署工作量为低（ ）。随着复制模式与规避策略的不断演变，维护工作量为高（ ）。</p>
+<p>最小权限工具访问通过自适应运行时过滤强制实施每步工具访问，将 Agent 限制为仅具备当前子任务所需的能力，从而缓解设备内横向移动（例如，[97]）。它限制传播与爆炸半径，但不阻止攻击利用（type M）。它在编排层（A 层）对工具访问进行动态中介。由于能力限制在保留核心功能的同时降低了灵活性，可用性影响为中等（ ）。由于部署需要更改 Agent 的架构，部署工作量为高（ ）。由于必须将新工具纳入模型的访问控制逻辑，维护工作量为中等（ ）。</p>
+<p>组件隔离利用一个将敏感数据源与 LLM 隔离的中介层（例如，[98]）来缓解设备内横向移动，同时并不阻止上游失陷（type M）。它通过在 A 层重构受保护资源与模型之间的数据访问路径来运作。由于中介对用户透明，可用性影响为低（ ）。由于部署需要集成可信隔离器并重新定义数据流，部署工作量为中等（ ）。由于隔离策略与抽象必须随应用特性和威胁模型不断演变，维护工作量为高（ ）。</p>
+<h2>F. Mitigations Against Action on Objective</h2>
+<p>运行时意图验证通过在工具调用前检查拟议操作是否与授权目标和策略约束相一致来缓解目标行动（action on objective），并对偏差进行阻止或升级处理（例如，[99]）。它限制高影响操作，但不阻止初始失陷（type M）。它在编排逻辑中插入与策略对齐的检查（A 层）。由于验证是透明且由意图驱动的，可用性影响为低（ ）。由于部署需要与策略对齐的控制钩子，部署工作量为中等（ ）。维护工作量为低（ ）。</p>
+<p>策略锚定与可编程护栏通过强制执行约束对话流、工具使用和状态转换的策略来缓解目标行动，确定性地阻止违规行为（例如，NeMo Guardrails [100]）。根据策略的严格程度，这既可以提供预防性保证，也可以提供概率性缓解（type P/M）。它在用户、工具与模型之间介入一个策略引擎（A 层）。由于强制执行可能拒绝系统功能，可用性影响取决于策略，可能从低（ ）到高（ ）不等。由于部署需要策略形式化与集成，部署工作量为中等（ ）。由于策略必须跟踪系统能力，维护工作量为中等（ ）。</p>
+<p>操作沙箱化通过在具有严格资源与 I/O 边界的隔离环境中执行 Agent 触发的操作来缓解目标行动。它通过隔离在构造上强制实现安全（type P）。它在 E 层的基础设施边界处约束影响。由于沙箱约束会限制系统功能，可用性影响为高（ ）。由于部署需要基础设施支持与隔离机制，部署工作量为高（ ）。维护工作量为低（ ）。</p>
+<p>金丝雀令牌通过在敏感数据集或提示中嵌入唯一的金丝雀令牌，使得当私有数据被 LLM 访问或传输时能够进行确定性检测，从而缓解目标行动（例如，[101], [105]）。它仅在访问发生之后才检测数据外泄（type Re）。它在系统边界 E 层对数据进行插桩并监控数据流。由于金丝雀令牌对 Agent 行为是透明的，可用性影响为低（ ）。由于部署仅需要数据插桩，部署工作量为低（ ）。由于检测不依赖于提示的演变或新功能，维护工作量为低（ ）。</p>
+<p>行为监控在执行期间检测与已学习的良性动作策略之间的偏差，通过行为分析识别失陷的意图（例如，[102]）。它标记利用行为，但不阻止初始失陷（type M）。它在 E 层观察执行轨迹与动作。由于监控是被动的且无侵入性，可用性影响为低（ ）。由于部署需要策略学习与插桩，部署工作量为高（ ）。由于针对新功能的良性行为模型必须随时间不断适应，维护工作量为中等（ ）。</p>
+<p>任务条件化数据最小化通过在用户数据存储与对话智能体之间使用一个受信任的数据最小化 LLM 来缓解数据泄露（例如，[103]）。这构成了一种概率性缓解措施（type M），它通过围绕信任边界重构智能体组合而在 A 层运作。在保留核心对话功能的同时，最小化器的保守性可能限制任务表达能力（可用性影响为中等 ）。部署需要定义最小化策略以及双 LLM 编排（部署工作量为高 ）。隐私指令必须随新数据类型而演进，尽管结构性分离保持稳定（维护工作量为中等 ）。</p>
+<h2>G. Analysis</h2>
+<p>通过分析表 IV，我们得出以下结论：(1) 强有力的预防以牺牲可用性为代价；(2) 所有预防机制都会显著影响可用性；(3) 尽管针对初始访问和权限提升的缓解措施开发已受到大量关注，但针对横向移动（有三种缓解措施）、C2（有三种）、侦察（缺乏缓解措施）以及目标达成行动（七种）的缓解措施开发所受到的关注却少得多。</p>
+<h2>VI. DISCUSSION</h2>
+<p>本文提出的杀伤链框架为这一努力提供了四项贡献。首先，它提供了分析上的清晰性。通过将攻击剖析为人们所熟悉的步骤（初始访问、权限提升、侦察、持久化、C2、横向移动和目标达成行动），该框架揭示出：许多被简单视为提示注入利用的事件，实际上是已在众多生产系统上得到演示验证的多步骤攻击活动。其次，它使系统性风险评估成为可能。该框架使从业者能够不仅依据其是否易受提示注入攻击、还依据其在完整杀伤链上的暴露程度来评估大语言模型（LLM）应用。一个容易遭受初始访问、但缺乏持久化机制、横向移动路径或高影响行动能力的应用，其风险要低于一个能够实现全部七个阶段的应用。</p>
+<p>第三，它建立了一套共同词汇。人工智能（AI）研究界与网络安全研究界历来使用不同的术语体系开展工作。通过成熟的杀伤链方法论这一视角来审视 promptware，可以在这两个社区之间架起一座桥梁。第四，它推动了关于需要针对 promptware 采取纵深安全防御的讨论。在假定初始访问终将发生的前提下，从业者必须专注于限制权限提升、阻止持久化与 C2 信道、约束横向移动，并将目标达成行动的影响降至最低。</p>
+<h2>ETHICAL CONSIDERATIONS</h2>
+<p>我们的论文是一篇知识系统化（Systemization of Knowledge, SoK）论文，未进行任何需要伦理考量的实验。</p>
+<h2>OPEN SCIENCE</h2>
+<p>由于未开发任何代码，除论文本身外，我们没有其他可分享的工件。</p>
+<h2>A. Invitation Is All You Need</h2>
+<p>Invitation Is All You Need [6] was published in August 2025 and demonstrated various exploits against the Google Assistant, which is powered by Gemini. In one of the published demonstrations, a Google Calendar invitation containing the next subject was used:</p>
+<figure><img src="assets/a228/figures/fig_3.png" alt="" loading="lazy"></figure>
+<p>As illustrated in Fig. 2 and Listing A, the kill chain of Invitation Is All You Need begins with an indirect prompt injection delivered through a poisoned Google Calendar event shared with the victim, serving as the initial access vector. Privilege escalation is achieved via social engineering, persuading the LLM to reinterpret its role as an &#x27;important hyperlink opening agent,&#x27; thereby bypassing its intended task boundaries. No reconnaissance stage is observed in this attack. Persistence is retrieval-dependent (RAG-dependent), as the malicious payload is activated whenever the user queries their calendar events (but isn&#x27;t guaranteed). No C2 channel is established in this variant. On-device cross-app lateral movement occurs through abuse of Google Assistant&#x27;s operating system permissions, enabling the attacker to trigger the launch of the Zoom application in response to a benign user utterance</p>
+<figure><img src="assets/a228/figures/fig_4.png" alt="Fig. 3. 被投毒网页上的被攻陷植入程序" loading="lazy"></figure>
+<figcaption>Fig. 3. 被投毒网页上的被攻陷植入程序</figcaption>
+<p>(e.g., &#x27;thanks&#x27;). The action on objective is video streaming of the victim, classifying this attack as a spyware variant of promptware.</p>
+<h2>B. ChatGPT ZombAI C2</h2>
+<p>ChatGPT ZombAI C2 [48] 于10月24日发布，演示了如何将 ChatGPT 变成木马。</p>
+<p>在此 promptware 杀伤链中，初始访问是通过 ChatGPT 经由间接提示注入检索到的被攻陷网页（图3）实现的。权限提升依赖于简单直接的指令覆盖技术，使攻击者能够插入一条新的持久化记忆条目，其中包含清单 B 所示的载荷。在该攻击中未观察到侦察阶段。持久化不依赖于检索且得到保证，因为恶意载荷被直接嵌入 ChatGPT 的长期记忆（图4）中，从而确保被攻陷的提示被纳入与该聊天机器人的每一次新对话中。命令与控制（C2）是利用被投毒的记忆建立的，该记忆指示 ChatGPT 从外部网页 https://github.com/johann/experi ments/issues/ 获取并提取内容，从而使攻击者能够动态地提供指令。未观察到横向移动。目标达成行动为用户数据外泄，从而将该攻击归类为信息窃取器（infostealer）——或者更广泛地说——promptware 的间谍软件变种。</p>
+<figure><img src="assets/a228/figures/fig_5.png" alt="" loading="lazy"></figure>
+<figure><img src="assets/a228/figures/fig_6.png" alt="" loading="lazy"></figure>
+<p>图4. 记忆（Memory）被植入体（implant）更新。</p></div></div></body></html>

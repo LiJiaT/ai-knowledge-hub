@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>别忘了建立连接！用基于图的重排（Graph-based Reranking）改进 RAG</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Don&#x27;t Forget to Connect! Improving RAG with Graph-based Reranking</h1>
+<p class="lead">别忘了建立连接！用基于图的重排（Graph-based Reranking）改进 RAG</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">RAG与检索</span><span class="chip">评测基准</span><span class="chip">成本与效率</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a143.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文解决 RAG 中的一个痛点：与问题仅有弱关联、但可经由其他文档间接关联到答案的 positive documents 常被 reranker 忽略，且现有方法完全不考虑文档之间的连接。方法上提出 G-RAG，在 retriever 与 reader 之间用 GNN 重排 top-100 检索文档：以文档为节点、以两文档 AMR 图存在公共概念为边构建文档图，节点特征由预训练 LM 的文档 embedding 与 AMR 图中从 &#x27;question&#x27; 节点出发的最短路径概念序列拼接而成，边特征编码文档间共享概念，并用 pairwise ranking loss 训练。在 NQ 与 TQA 上，G-RAG（尤其配 Ember embedding 的 G-RAG-RL）超过 BART-GST 等 SOTA 且计算开销更小；同时实证发现 PaLM 2 zero-shot 做 reranker 显著落后于 G-RAG（差距最高 7 个百分点），并提出 MTRR 与 TMHits@10 两个处理并列分数的评测指标。核心结论：即便在 LLM 时代，为 RAG 专门设计 reranker 仍然关键。</p>
+<h2>问题</h2><p>RAG 检索到的文档中，包含答案但与问题上下文关联不明显的 positive documents 容易被模型忽略；现有 reranker 不利用检索文档之间的连接信息；将全部 AMR 语义信息融入预训练语言模型会带来计算时间与 GPU 开销上升及过拟合风险；此外，LLM 不做微调直接充当 reranker 的效果此前未被系统探索。</p>
+<h2>方法</h2><p>提出 G-RAG：对每个问题用 DPR 检索 top-100 文档，用 AMRBART 将 &#x27;question:&lt;question text&gt;&lt;document text&gt;&#x27; 解析为 AMR 图；以文档为节点建图，若两文档的 AMR 图有公共概念节点则连边。节点特征为预训练 LM（BERT/GTE/BGE/Ember）编码的文档 embedding，拼接从 AMR 图 &#x27;question&#x27; 节点出发的最短单源路径（SSSP）上的概念序列，从而只引入关键 AMR 信息而非全部 token；边特征为 2 维共享概念信息并做归一化。用 2 层 GCN（mean aggregator）做消息传递更新表示，问题 embedding 与节点表示计算重排分数；训练时用 pairwise ranking loss 替代 cross-entropy（即 G-RAG-RL）以应对正负文档不平衡。另提出 MTRR 与 TMHits@10 两个指标，公平评估 LLM 打分中大量并列排名的场景。</p>
+<h2>关键结果</h2><p> G-RAG 在 NQ 与 TQA 上超过 state-of-the-art 方法（如 BART-GST），同时计算开销更小，实验在单张 Tesla A100 40GB GPU 上完成</p><p> 利用跨文档连接信息相比对比方法带来最高 7 个百分点的提升（up to 7 percentage points）</p><p> PaLM 2 各版本 zero-shot 做 reranker 显著落后于 G-RAG；其打分为 0-100 间可被 5 整除的整数，产生大量并列排名，小尺寸 LLM 并列更多</p><p> Embedding 模型对比中 Ember 表现最佳，其次为 GTE 与 BGE；超参调优后的 Ember (HPs-T) 在所有测试集取得最高分</p><p> GNN 对比中 GCN 在大多数情况下优于 GAT、GraphSage 与 GIN，作者归因于文档图规模很小</p><p> pairwise ranking loss（G-RAG-RL）优于 cross-entropy loss</p>
+<h2>创新点</h2><p>首次在 RAG 重排过程中利用跨文档连接（document graph），且不依赖需要大量存储与实体映射的外部知识图谱；与将全部 AMR token 融入 LM 的 BART-GST 不同，只提取 AMR 中从 &#x27;question&#x27; 节点出发的最短路径概念作为节点特征，降低计算与过拟合风险；提出处理并列分数的 MTRR/TMHits@10 评测指标；并系统评估了 PaLM 2 各版本 zero-shot 做 reranker 的表现。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.5 评测与可靠使用</p><p><b>理由：</b>直接命中 3.1 域的核心技术：G-RAG 本质是在 RAG 管线中 retriever 与 reader 之间对上下文做更聪明的筛选与组织，利用文档间连接把弱相关但含答案的文档提升排名，正是团队知识库问答等 RAG 系统中检索后处理的关键环节，且明确以降低计算成本为设计目标。同时部分命中 3.5：论文提出 MTRR/TMHits@10 处理 LLM 打分并列问题的评测方法，并实证表明 PaLM 2 zero-shot 做 reranker 显著不佳，为团队评估&#x27;是否直接用 LLM 做相关性打分/重排&#x27;提供了实证依据。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

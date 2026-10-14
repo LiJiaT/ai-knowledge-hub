@@ -1,0 +1,166 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ragas：Retrieval Augmented Generation 的自动化评估</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Ragas: Automated Evaluation of Retrieval Augmented Generation</h1>
+<p class="lead">Ragas：Retrieval Augmented Generation 的自动化评估</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">RAG与检索</span><span class="chip">评测基准</span><span class="chip">提示技术</span><span class="chip">可靠性与安全</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a219.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>RAG 系统的评估通常依赖人工标注的参考答案或模型内部概率，这在缺乏标注数据、使用闭源 API 模型时难以实施，而困惑度等传统指标又与下游表现不相关。论文提出 Ragas，一个 reference-free 的 RAG 自动评估框架，围绕三个维度设计指标：Faithfulness（将答案分解为细粒度陈述并逐条验证能否从检索上下文推断，按支持比例计分）、Answer Relevance（由答案反向生成候选问题，计算与原问题的 embedding 余弦相似度）和 Context Relevance（让 LLM 抽取回答问题所需的关键句子，按占比计分以惩罚冗余上下文）。作者构建 WikiEval 数据集（50 个 Wikipedia 页面、双人标注）验证指标与人类判断的一致性，结果显示 Ragas 显著优于直接打分（GPT Score）与直接排序（GPT Ranking）两个基线，其中 Faithfulness 最准确、Context Relevance 最难评估。框架已开源并与 llama-index、Langchain 集成，可直接嵌入 RAG 开发工作流。</p>
+<h2>问题</h2><p>RAG 系统评估困难：性能同时受检索模型、语料、LLM 和 prompt 影响，需要多维度评估；实践中常用困惑度评估，但既不能预测下游表现，又依赖闭源 API 模型无法提供的 token 概率；QA 式评估依赖参考答案，而实际构建 RAG 系统时通常没有人工标注数据。论文要解决的问题是：在无参考答案（reference-free）条件下，如何自动化、多维度地评估 RAG 系统的检索与生成质量。</p>
+<h2>方法</h2><p>提出三个完全自包含、无需参考答案的指标，全部通过 prompting LLM（gpt-3.5-turbo-16k）实现：(1) Faithfulness：先用 LLM 将答案分解为陈述集合 S，再逐条用验证 prompt（要求先给出简要解释再输出 Yes/No 结论）判断能否从检索上下文推断，得分 F=|V|/|S|；(2) Answer Relevance：让 LLM 基于答案生成 n 个候选问题，用 text-embedding-ada-002 计算各候选问题与原问题的 cosine 相似度取平均，惩罚不完整或冗余的答案；(3) Context Relevance：让 LLM 从上下文中抽取回答问题所需的关键句子（不得改写原句），按句子占比计分，惩罚冗余信息。同时构建 WikiEval 评测集（50 个 2022 年后事件的 Wikipedia 页面，ChatGPT 生成问答，双人标注三维度判断），以成对比较方式与 GPT Score、GPT Ranking 两个基线对比。框架与 llama-index、Langchain 集成并开源。</p>
+<h2>关键结果</h2><p> 人工标注者间一致性：faithfulness 与 context relevance 约 95%，answer relevance 约 90%</p><p> 在 WikiEval 成对比较中，Ragas 指标与人类判断的一致性（accuracy）显著高于 GPT Score 与 GPT Ranking 两个基线（Table 1 报告了 accuracy，但具体数值未在提供的正文中展示）</p><p> Faithfulness 预测总体高度准确；answer relevance 一致性较低，主要因两个候选答案间差异细微；context relevance 是最难评估的维度</p><p> WikiEval 数据集规模：50 个 Wikipedia 页面（2022 年后事件），每页由 ChatGPT 生成一个问题及基于引言部分的回答</p>
+<h2>创新点</h2><p>区别于依赖参考答案的指标（BERTScore、MoverScore、BARTScore）和依赖 token 概率或模型内部状态的方法（GPTScore、Azaria &amp; Mitchell 的隐藏层分类器，均不适用于 API 模型），Ragas 完全 reference-free 且只需 API 访问；针对 RAG 特有的三个质量维度分别设计指标，其中 faithfulness 采用&#x27;陈述分解+逐条验证&#x27;的分解式评估而非整体打分；此外作者表示未找到满足需求的公开数据集，因此构建了带三维度人工判断的 WikiEval 数据集。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.5 评测与可靠使用</p><p><b>理由：</b>直接命中团队两个核心能力域：3.5（LLM 应用评测基准与方法）——Ragas 正是面向 LLM 应用（RAG）的自动化评测框架，解决团队&#x27;产出质量与可靠性的评测保障&#x27;问题；3.1（RAG/检索增强与上下文管理）——Context Relevance 指标直接度量检索上下文的质量与冗余，Faithfulness 度量上下文被忠实利用的程度，与团队知识库问答等 RAG 场景的上下文组织工作直接对应。此外三个指标均通过精心设计的 prompt（含 demonstration、格式约束、先解释后结论）实现，其&#x27;分解-验证&#x27;的提示模式对团队设计评估类提示词也有参考价值。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2309.15217v2  [cs.CL]  2025年4月28日</p>
+<h2>Ragas: Automated Evaluation of Retrieval Augmented Generation</h2>
+<p>Ragas：检索增强生成的自动化评估</p>
+<p>Shahul Es †，Jithin James †，Luis Espinosa-Anke ∗♢，Steven Schockaert ∗</p>
+<p>† Exploding Gradients</p>
+<p>CardiffNLP，卡迪夫大学，英国 ♢ AMPLYFI，英国</p>
+<p>∗</p>
+<p>shahules786@gmail.com,jamesjithin97@gmail.com</p>
+<p>{espinosa-ankel,schockaerts1}@cardiff.ac.uk</p>
+<h2>Abstract</h2>
+<p>我们提出 Ragas（R etrieval A ugmented G eneration As sessment），一个用于对检索增强生成（RAG）流水线进行无参考评估的框架。RAG 系统由检索模块和基于大语言模型（LLM）的生成模块组成，为 LLM 提供来自参考文本数据库的知识，使其能够充当用户与文本数据库之间的自然语言层，从而降低幻觉风险。然而，评估 RAG 架构颇具挑战性，因为需要考虑多个维度：检索系统识别相关且聚焦的上下文段落的能力、LLM 以忠实方式利用这些段落的能力，以及生成本身的质量。借助 Ragas，我们提出了一套指标，可用于评估这些不同维度，而无需依赖作为基准真值的人工标注。我们认为，这样一个框架能够为加快 RAG 架构的评估周期做出关键贡献，鉴于 LLM 的快速普及，这一点尤为重要。</p>
+<h2>1 Introduction</h2>
+<p>语言模型（Language Models, LMs）捕获了大量关于世界的知识，这使它们能够在不访问任何外部来源的情况下回答问题。将语言模型视为知识库的这一思想在 BERT（Devlin et al., 2019）问世后不久便已出现，并随着规模越来越大的语言模型的推出而得到更加牢固的确立（Roberts et al., 2020）。尽管最新的大语言模型（Large Language Models, LLMs）已经掌握了足以在各种问答基准测试（benchmark）上与人类表现相媲美的知识（Bubeck et al., 2023），但将 LLM 用作知识库的想法仍然存在两个根本性的局限。首先，LLM 无法回答关于其训练之后发生的事件的问题。其次，即使是最大的模型也难以记住训练语料库中仅被偶尔提及的知识（Kandpal et al., 2022; Mallen et al., 2023）。解决这些问题的标准方案是采用检索增强生成（Retrieval Augmented Generation, RAG）（Lee et al., 2019; Lewis et al., 2020; Guu et al., 2020）。回答问题的过程本质上包括从语料库中检索相关段落，并将这些段落连同原始问题一起输入给语言模型。虽然早期的方法依赖于专门的语言模型来进行检索增强的语言建模（Khandelwal et al., 2020; Borgeaud et al., 2022），但近期的工作表明，仅仅将检索到的文档添加到标准语言模型的输入中也能取得良好效果（Khattab et al., 2022; Ram et al., 2023; Shi et al., 2023），从而使检索增强策略能够与仅可通过 API 获取的 LLM 结合使用。</p>
+<p>尽管检索增强策略的实用性显而易见，但其实施需要大量的调优，因为整体性能会受到检索模型、所考虑的语料库、语言模型或提示（prompt）表述等多种因素的影响。因此，对检索增强系统进行自动化评估至关重要。在实践中，RAG 系统通常依据语言建模任务本身来评估，即通过在某个参考语料库上测量困惑度（perplexity）来进行。然而，这类评估并不总能预测下游性能（Wang et al., 2023c）。此外，这种评估策略依赖于语言模型的概率，而某些封闭模型（例如 ChatGPT 和 GPT-4）无法获取这些概率。问答是另一种常见的评估任务，但通常只考虑具有简短抽取式答案的数据集，这可能无法代表系统的实际使用方式。</p>
+<p>为解决这些问题，本文提出 Ragas 1，一个用于自动评估检索增强生成（RAG）系统的框架。我们关注参考答案可能不可用的场景，此时除了检索段落的有用性之外，我们还希望估计正确性的各种代理指标。Ragas 框架与 llama-index 和 Langchain——构建 RAG 解决方案时使用最广泛的两个框架——实现了集成，从而使开发者能够轻松地将 Ragas 集成到其标准工作流程中。</p>
+<p>1 Ragas 可在 https://github.com/ explodinggradients/ragas 获取。</p>
+<h2>2 Related Work</h2>
+<p>使用大语言模型（LLM）估计忠实度</p>
+<p>检测 LLM 生成回答中的幻觉这一问题已得到广泛研究 (Ji et al., 2023)。多位作者提出了利用少样本提示策略预测事实性的想法 (Zhang et al., 2023)。然而，近期分析表明，现有模型在使用标准提示策略时难以检测幻觉 (Li et al., 2023; Azaria and Mitchell, 2023)。其他方法则依赖于将生成的回答与外部知识库中的事实相关联 (Min et al., 2023)，但这并非总是可行。</p>
+<p>还有一种策略是检查分配给各个 token 的概率，此时我们预期模型对幻觉回答的置信度会低于对事实性回答的置信度。例如，BARTScore (Yuan et al., 2021) 通过考察在给定输入的条件下生成文本的条件概率来估计事实性。Kadavath et al. (2022) 使用了这一思路的一种变体。基于 LLM 在回答多项选择题时能提供校准良好的概率这一观察，他们实质上将验证模型生成回答的问题转化为一个询问该回答是真是假的多项选择题。Azaria and Mitchell (2023) 则不考察输出概率，而是提出在 LLM 某一隐藏层的权重上训练一个监督分类器，以预测给定陈述是否为真。尽管该方法表现良好，但由于需要访问模型的隐藏状态，它并不适合通过 API 访问 LLM 的系统。</p>
+<p>对于不提供 token 概率访问的模型，例如 ChatGPT 和 GPT-4，则需要不同的方法。SelfCheckGPT (Manakul et al., 2023) 通过改为采样多个回答来解决这一问题。其核心思想是事实性回答更加稳定：当回答符合事实时，可以预期不同的采样结果在语义上趋于相似，而对于幻觉回答则不太可能出现这种情况。</p>
+<h2>Automated evaluation of text generation systems</h2>
+<p>除了事实性之外，LLM 还被用于自动评估所生成文本片段的其他方面。例如，GPTScore (Fu et al., 2023) 使用一个指定所考察方面（例如流畅性）的提示，然后依据给定的自回归语言模型（LM），基于所生成 token 的平均概率对文本段落进行评分。这种使用提示的想法此前也已被 Yuan et al. (2021) 考虑过，不过他们使用的是较小的微调 LM（即 BART），并未观察到使用提示带来的明显收益。另一种方法则直接要求 ChatGPT 通过给出 0 到 100 之间的分数，或以 5 星制给出评级，来评估给定答案的某个特定方面 (Wang et al., 2023a)。值得注意的是，通过这种方式可以获得很强的结果，但其局限在于对提示的设计较为敏感。一些作者不再对单个答案进行评分，而是专注于利用 LLM 从多个候选答案中选出最佳答案 (Wang et al., 2023b)，这通常是为了比较不同 LLM 的性能。然而，使用这种方法需要谨慎，因为答案呈现的顺序可能会影响结果 (Wang et al., 2023b)。</p>
+<p>就标准答案（ground truth answers）——或更一般地说，生成结果——在文献中的典型使用方式而言，大多数方法都依赖于一个或多个参考答案的可用性。例如，BERTScore (Zhang et al., 2020) 和 MoverScore (Zhao et al., 2019) 使用由预训练 BERT 模型产生的上下文化嵌入（contextualised embeddings）来比较生成答案与参考答案之间的相似度。BARTScore (Yuan et al., 2021) 同样使用参考答案来计算诸如精确率（precision，估计为在给定参考答案的条件下生成所生成答案的概率）和召回率（recall，估计为在给定所生成答案的条件下生成参考答案的概率）等方面的指标。</p>
+<h2>3 Evaluation Strategies</h2>
+<p>请考虑给定的上下文及以下陈述，然后判断这些陈述是否得到上下文中现有信息的支持。在得出判定（Yes/No）之前，请为每条陈述提供简要解释。最后请按给定格式依次为每条陈述给出最终判定。请勿偏离指定的格式。</p>
+<p>最终的忠实度（faithfulness）得分 F 随后计算为 F = |V| / |S|，其中 |V| 是根据 LLM 判定为获得支持的陈述数量，|S| 是陈述总数。</p>
+<p>答案相关性（Answer relevance）如果答案 a_s(q) 以恰当的方式直接回应了问题，我们就称该答案是相关的。特别地，我们对答案相关性的评估并不考虑事实性（factuality），但会对答案不完整或包含冗余信息的情况予以惩罚。为了估计答案相关性，对于给定的答案 a_s(q)，我们提示 LLM 基于 a_s(q) 生成 n 个潜在问题 q_i，如下所示：</p>
+<p>随后，我们使用 OpenAI API 提供的 text-embedding-ada-002 模型为所有问题获取嵌入（embedding）。对于每个 q_i，我们计算其与原始问题 q 之间的相似度 sim(q, q_i)，即对应嵌入之间的余弦值。问题 q 的答案相关性得分 AR 随后计算如下：</p>
+<p>该指标评估生成的答案与初始问题或指令的契合程度。</p>
+<p>上下文相关性（Context relevance）上下文 c(q) 被认为相关的程度，取决于它是否仅包含回答该问题所需的信息。特别地，该指标旨在惩罚冗余信息的引入。为了估计上下文相关性，给定问题 q 及其上下文 c(q)，LLM 使用以下提示从 c(q) 中提取对回答 q 至关重要的句子子集 S_ext：</p>
+<p>请从所提供的上下文中提取可能有助于回答以下问题的相关句子。如果没有找到相关句子，或者您认为无法根据给定的上下文回答该问题，请返回短语 &quot;Insufficient Information&quot;。在提取候选句子时，您不得对给定上下文中的句子做任何更改。</p>
+<p>上下文相关性得分随后计算如下：</p>
+<h2>4 The WikiEval Dataset</h2>
+<p>为了评估所提出的框架，我们理想情况下需要带有的人工判断标注的“问题-上下文-回答”三元组示例。这样我们便可以验证我们的指标在多大程度上与人类对忠实性、回答相关性和上下文相关性的评估相一致。由于我们尚不知道有任何公开可用的数据集可用于此目的，我们创建了一个新数据集，我们将其称为 WikiEval 4。为了构建该数据集，我们首先选择了 50 个维基百科页面，这些页面涵盖自 2022 年初以来发生的事件 5。在选择这些页面时，我们优先考虑了近期有编辑的页面。对于这 50 个页面中的每一个，我们随后要求 ChatGPT 基于页面的引言部分提出一个可以回答的问题，所使用的提示如下：</p>
+<p>你的任务是从给定上下文中制定一个满足下面给出的规则的问题：</p>
+<p>4 https://huggingface.co/datasets/ explodinggradients/WikiEval</p>
+<p>5 即晚于我们在实验中所用模型所报告的训练截止时间。</p>
+<p>链接。</p>
+<p>我们还使用 ChatGPT 来回答所生成的问题，即在给定相应引言部分作为上下文的情况下，所使用的提示如下：</p>
+<p>使用给定上下文中的信息回答问题。question: [question] context: [context]</p>
+<p>所有问题均由两名标注者按照所考虑的三个质量维度进行了标注。两名标注者均具备流利的英语能力，并获得了关于这三个质量维度含义的明确说明。对于忠实性和上下文相关性，两名标注者在约 95% 的情况下意见一致。对于回答相关性，他们在约 90% 的情况下意见一致。分歧在标注者之间经过讨论后得到解决。</p>
+<p>忠实性 为了获得关于忠实性的人工判断，我们首先让 ChatGPT 在无法访问任何额外上下文的情况下回答问题。然后，我们要求标注者在给定问题及相应维基百科页面的情况下，判断两个回答中哪一个最为忠实（即标准回答，还是没有上下文时生成的那个回答）。</p>
+<p>回答相关性 我们首先使用 ChatGPT 获得回答相关性较低的候选回答，所使用的提示如下：</p>
+<p>随后，我们要求人工标注者对该回答进行比较，并指出两个回答中哪一个具有最高的回答相关性。</p>
+<p>上下文相关性 为了衡量这一方面，我们首先通过抓取指向相应维基百科页面的反向链接（back-links），向上下文中添加了额外的句子。通过这种方式，我们得以向上下文中添加与问题相关、但对回答问题而言相关性较低的信息。对于少数没有任何反向链接的页面，我们则改用 ChatGPT 来补全给定的上下文。</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>Faith.</th><th>Ans. Rel.</th><th>Cont. Rel.</th></tr></thead><tbody>
+<tr><td>Ragas</td><td>0.95</td><td>0.78</td><td>0.7</td></tr>
+<tr><td>GPT Score</td><td>0.72</td><td>0.52</td><td>0.63</td></tr>
+<tr><td>GPT Ranking</td><td>0.54</td><td>0.4</td><td>0.52</td></tr>
+</tbody></table></div>
+<p>|             |   Faith. |   Ans. Rel. |   Cont. Rel. |</p>
+<figcaption>Table 1: 使用 WikEval 数据集，在忠实度、答案相关性和上下文相关性的成对比较中与人类标注者的一致性（准确率）。</figcaption>
+<h2>5 Experiments</h2>
+<p>表 1 分析了第 3 节中提出的各项指标与所提出的 WikiEval 数据集中人工评估之间的一致性。每个 WikiEval 实例都要求模型对两个回答或两个上下文片段进行比较。我们统计模型所偏好的回答/上下文（即忠实度、回答相关性或上下文相关性估计值最高的那个）与人工标注者所偏好的回答/上下文相一致的频率。我们以准确率（即模型与标注者意见一致的实例所占的比例）的形式报告结果。</p>
+<p>为了给这些结果提供参照，我们将所提出的指标（在表 1 中显示为 Ragas）与两种基线方法进行了比较。对于第一种方法（显示为 GPT Score），我们让 ChatGPT 为三个质量维度分别给出一个 0 到 10 之间的分数。为此，我们使用了一个提示词（prompt），该提示词先描述相应质量指标的含义，然后要求按照该定义对给定的回答/上下文进行打分。例如，在评估忠实度时，我们使用了以下提示词：</p>
+<p>忠实度（Faithfulness）衡量回答相对于给定上下文的信息一致性。回答中所作出的任何无法从上下文推导出来的断言都应受到惩罚。给定一个回答和上下文，请在 0-10 的范围内为忠实度打一个分数。context : [context] answer : [answer]</p>
+<p>当大语言模型（LLM）给两个候选回答打出相同的分数而出现平局时，我们随机打破平局。第二种基线方法（显示为 GPT Ranking）则改为让 ChatGPT 选出其偏好的回答/上下文。在这种情况下，提示词中同样包含所考虑的质量指标的定义。例如，在评估回答相关性时，我们使用了以下提示词：</p>
+<p>回答相关性（Answer Relevancy）衡量回答在多大程度上直接针对给定问题并与其相匹配。对于给定的问题，它会对冗余信息的存在或不完整的回答进行惩罚。给定一个问题和回答，请根据回答相关性对每个回答进行排序。</p>
+<p>表 1 中的结果表明，与两种基线方法的预测相比，我们所提出的指标与人工判断的一致程度要高得多。对于忠实度，Ragas 的预测总体上非常准确。对于回答相关性，一致性较低，但这在很大程度上是由于两个候选回答之间的差异往往非常细微所致。我们发现上下文相关性是最难评估的质量维度。特别是，我们观察到 ChatGPT 在从上下文中挑选出关键句子的任务上常常表现吃力，尤其是在上下文较长的情况下。</p>
+<h2>6 Conclusions</h2>
+<p>我们强调了针对检索增强生成（RAG）系统进行自动化无参考评估的必要性。特别地，我们论证了对一个评估框架的需求，该框架能够评估忠实度（即回答是否以检索到的上下文为依据）、回答相关性（即回答是否切中问题）以及上下文相关性（即检索到的上下文是否足够聚焦）。为支持此类框架的开发，我们引入了 WikiEval，这是一个包含针对这三个不同方面的人工判断的数据集。最后，我们还介绍了 Ragas，即我们对所考虑的三个质量维度的实现。该框架易于使用，即使缺乏任何真值（ground truth），也能为 RAG 系统的开发者提供有价值的洞见。我们在 WikiEval 上的评估表明，Ragas 的预测与人工预测高度一致，尤其是在忠实度和回答相关性方面。</p>
+<h2>A Examples from WikiEval</h2>
+<p>表 2、表 3 和表 4 展示了 WikiEval 数据集中的示例，特别聚焦于忠实度高与低的回答（表 2）、回答相关性高与低（表 3），以及上下文相关性高与低（表 4）。</p>
+<div class="tablewrap"><table><thead><tr><th>Question</th><th>Context</th><th>Answer</th></tr></thead><tbody>
+<tr><td>Who directed the film Op- penheimer and who stars as J. Robert Oppenheimer in the film?</td><td>Oppenheimer is a 2023 biographical thriller film written and directed by Christopher Nolan. Based on the 2005 biography American Prometheus by Kai Bird and Mar- tin J. Sherwin, the film chronicles the life of J. Robert Oppenheimer, a theoretical physicist who was pivotal in developing the first nuclear weapons as part of the Man- hattan Project, and thereby ushering in the Atomic Age. Cillian Murphy stars as Oppenheimer, with Emily Blunt as Oppenheimer&#x27;s wife Katherine &quot;Kitty&quot; Oppenheimer.</td><td>High Faithfulness : Christopher Nolan directed the film Oppen- heimer. Cillian Murphy stars as J. Robert Oppenheimer in the film. Low Faithfulness : James Cameron directed the film Op- penheimer. Tom Cruise stars as J. Robert Oppenheimer in the film.</td></tr>
+</tbody></table></div>
+<p>| Question                                                                                | Context                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Answer                                                                                                                                                                                                                                                     |</p>
+<figcaption>Table 2: 来自 WikiEval 的示例，展示忠实度高和低的答案。</figcaption>
+<div class="tablewrap"><table><thead><tr><th>Question</th><th>Answer</th></tr></thead><tbody>
+<tr><td>When is the scheduled launch date and time for the PSLV-C56 mission, and where will it be launched from?</td><td>High answer relevance : The PSLV-C56 mission is scheduled to be launched on Sunday, 30 July 2023 at 06:30 IST / 01:00 UTC. It will be launched from the Satish Dhawan Space Centre, Sriharikota, Andhra Pradesh, India. Low answer relevance : The scheduled launch date and time for the PSLV-C56 mission have not been provided.The PSLV-C56 mission is an important space mission for India. It aims to launch a satellite into orbit to study weather patterns.</td></tr>
+</tbody></table></div>
+<p>| Question                                                                                                 | Answer                                                                                                                                                                                                                                                                                                                                                                                                                                                              |</p>
+<figcaption>Table 3: 来自 WikiEval 的示例，展示答案相关性高和低的答案。</figcaption>
+<div class="tablewrap"><table><thead><tr><th>Question</th><th>Context</th></tr></thead><tbody>
+<tr><td>When was the Chimnabai Clock Tower completed, and who was it named af- ter?</td><td>High context relevance : The Chimnabai Clock Tower, also known as the Raopura Tower, is a clock tower situated in the Raopura area of Vadodara, Gujarat, India. It was completed in 1896 and named in memory of Chimnabai I (1864-1885), a queen and the first wife of Sayajirao Gaekwad III of Baroda State. Low context relevance : The Chimnabai Clock Tower, also known as the Raopura Tower, is a clock tower situated in the Raopura area of Vadodara, Gujarat, India. It was completed in 1896 and named in memory of Chimnabai I (1864-1885), a queen and the first wife of Sayajirao Gaekwad III of Baroda State. It was built in Indo-Saracenic architecture style. History. Chimnabai Clock Tower was built in 1896. The tower was named after Chimnabai I (1864-1885), a queen and the first wife of Sayajirao Gaekwad III of Baroda State. It was inaugurated by Mir Kamaluddin Hussainkhan, the last Nawab of Baroda. During the rule of Gaekwad, it was a stoppage for horse drawn trams. The clock tower was erected at the cost of 25,000 (equivalent to 9.2 million or USD 120,000 in 2023).</td></tr>
+</tbody></table></div>
+<p>| Question                                                                    | Context                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |</p>
+<figcaption>Table 4: 来自 WikiEval 的示例，展示上下文相关性高和低的答案。</figcaption></div></div></body></html>

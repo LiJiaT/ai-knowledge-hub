@@ -1,0 +1,234 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基于随机抽样的高效故障注入方法论</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Methodology for Efficient Fault Injection using Random Sampling</h1>
+<p class="lead">基于随机抽样的高效故障注入方法论</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">DVCon 2024</span><span class="chip">故障注入</span><span class="chip">FMEDA</span><span class="chip">诊断覆盖率</span><span class="chip">功能安全标准</span><span class="chip">安全验证</span><span class="chip">2.6 Fault simulation/ZOIX/TFMEA</span><span class="chip">2.5 功能安全与安全机制</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/p046.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文针对安全关键 SoC 穷举 fault injection 资源消耗过大的问题，提出基于统计随机抽样的高效故障注入方法论。方法上先以 FMEA 与风险分级确定注入目标，采用 transient+permanent 综合故障模型，在约 300 万门汽车 SoC、约 4000 万故障总体中按统计公式确定样本量，每轮抽取约 3600 个故障，用 simulation 与 emulation 两种引擎执行注入，并以置信度与 Margin of Error 量化结果。针对传统随机抽样在 FMEDA 中只能套用均匀 coverage 的缺陷，进一步提出按各层级 failure rate/failure mode 分布加权的 constrained random sampling。结果显示 90% coverage 目标下 MOE 为 ±1.19%，约束抽样还发现了传统方法遗漏的 CPU 子系统关键失效模式。该统计抽样框架可直接借鉴到团队 TFMEA/FMEDA 的 coverage 论证与 fault injection campaign 设计。</p>
+<h2>问题</h2><p>安全关键系统（如 automotive SoC）为验证安全架构对故障的检测与控制能力，需要对海量故障场景做穷举 fault injection，但穷举测试所需测试与调试资源过大而不可行；同时传统随机抽样结果在集成到 FMEDA 时只能对整个 SoC 施加均匀 coverage，无法反映各 subpart 风险与关键度的差异。论文要解决如何在保证统计有效性的前提下，用抽样方式高效完成 fault injection 并获得可信、可分解的 coverage 结论。</p>
+<h2>方法</h2><p>定义多样化 test workload 代表典型系统行为与使用场景；用统计公式确定样本量 n、置信水平与 margin of error；以 FMEA 分层确定注入目标并结合环境暴露与安全角色做风险优先级排序；采用同时覆盖 transient 与 permanent 故障的综合故障模型；在 SoC 级用 simulation 与 emulation 两种 fault injection 引擎执行每轮约 3600 个故障的随机样本并聚合多轮结果。进一步提出 constrained random sampling：先分析各层级（CPU、memory、bus、peripheral 等）的 failure mode 分布，按观测或预期 failure rate 推导 scaling factor 作为乘子调整各层级故障被抽中的概率，使样本既统计代表又贴合系统真实风险分布，并可将同一方法下沉到 subpart 级按 failure mode 分布控制故障生成粒度。</p>
+<h2>关键结果</h2><p> 案例 SoC 规模约 300 万门（approximately three million gates），故障总体约 4000 万（approximately 40 million）</p><p> 每个随机样本约 3600 个故障即可满足 coverage 目标并维持可接受的误差范围</p><p> 在 90% coverage 目标下计算得 Margin of Error (MOE) 为 ±1.19%</p><p> constrained random sampling 发现了传统抽样方法未能充分代表的 CPU 子系统关键失效模式，并促成针对性设计改进与系统可靠性提升</p><p> 论文指出将顶层均匀 coverage 直接套用到 FMEDA 各 subpart 时存在明显不一致；按 failure rate/failure mode 分布分解后，针对各 subpart 的 targeted stimulus test 与 guided approach 为 fault injection closure 提供了有效闭环机制</p>
+<h2>创新点</h2><p>区别于已有的 random/stratified/adaptive sampling 研究，本文将随机抽样与 workload 特性结合，并提出以 failure mode/failure rate 分布推导 scaling factor 的 constrained random sampling，使抽样过程与系统真实风险分布对齐；同时明确指出并处理 FMEDA 中 uniform coverage 假设的局限，把顶层 coverage 统计分解到 subpart 与 failure mode 粒度，兼顾统计显著性与资源效率。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>2.6 Fault simulation/Z01X/TFMEA | 2.5 功能安全与安全机制</p><p><b>理由：</b>论文核心是统计抽样 fault injection 与 FMEDA coverage 论证，直接命中 2.6（基于功能 stimulus 的 fault injection、fault grading、FuSa TFMEA/FMEDA 论证关联）与 2.5（FMEA 驱动的目标选择、diagnostic coverage、safety verification、failure mode 建模）。团队在 LPDDR/HBM4/UCie 等 IP 的功能安全开发中，需要用有限的 fault injection 资源支撑 TFMEA/FMEDA 的 coverage 主张，本文的样本量/置信度/MOE 计算框架与 constrained random sampling 提供了可直接复用的统计方法论；其对 uniform coverage 局限的分析也与团队将顶层 coverage 分解到子模块与失效模式的需求高度一致。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><figure><img src="assets/p046/figures/fig_1.png" alt="" loading="lazy"></figure>
+<h2>Methodology for Efficient Fault Injection using Random Sampling</h2>
+<p>Prashantkumar S. Sonavane，三星印度公司副技术总监</p>
+<h2>A. Abstract</h2>
+<p>故障注入是评估系统在恶劣条件下的可靠性与韧性以及测试随机故障的一项关键技术。实现或维持安全状态的一种做法是运行穷举式故障注入，以检验安全架构检测故障或控制失效能力的有效性。然而，由于测试和调试所需的大量资源，穷举式故障注入测试可能并不切实际。在本文中，我们提出了一种以随机采样为核心的方法，以便在考虑各种测试工作负载的情况下高效地执行故障注入测试。</p>
+<p>我们的方法包含若干关键步骤：首先，定义一组多样化的测试工作负载，用以代表典型的系统行为和使用场景。接着，利用随机采样技术在每个工作负载内选取一个用于注入的故障子集。这种随机采样策略确保所注入的故障能够代表不同使用模式下潜在的系统脆弱性，而无需进行穷举测试。此外，我们引入了一种方法，将每个工作负载内多个随机采样的结果相结合，从而得出关于系统行为和韧性的具有统计显著性的结论。通过汇总各种故障注入的结果，我们的方法提供了对系统在各种条件下鲁棒性的全面理解。通过实验验证与分析，我们证明了与穷举式故障注入测试相比，我们基于随机采样的方法的有效性与高效性。我们的结果表明，随机采样在资源利用与测试覆盖之间取得了平衡，使其成为复杂系统中一种实用且有据可依的故障注入方法。</p>
+<p>总而言之，本文提出了一种清晰且有据可依的方法，用于在故障注入测试中利用随机采样。通过采用针对不同测试工作负载量身定制的随机采样技术，我们的方法提供了一种精简而有效的手段来评估系统的可靠性与鲁棒性，同时缓解了与穷举式故障注入相关的挑战。</p>
+<h2>B. Introduction and Related Work</h2>
+<p>在故障注入测试领域，人们已探索了多种方法与技术，以应对穷举测试的挑战。先前的研究考察了各种采样策略，包括随机采样、分层采样与自适应采样，以优化</p>
+<p>Vedant Garg, Synopsys USA (gargv@synopsys.com) (prashant.s2@samsung.com)</p>
+<figure><img src="assets/p046/figures/fig_2.png" alt="" loading="lazy"></figure>
+<p>故障注入实验。随机采样在软件测试与容错领域已得到广泛研究。</p>
+<p>尽管这些现有方法提供了宝贵的见解，我们的方法的独特之处在于将随机采样与针对特定工作负载的考量相结合，从而在多样化的系统场景中实现高效的故障注入测试。</p>
+<h2>C. Application</h2>
+<p>所提出的用于故障注入测试的随机采样方法学，可实际应用于系统可靠性与韧性至关重要的各类领域。其中一个关键应用领域是安全关键系统的开发与验证，例如汽车系统。</p>
+<p>例如，在汽车工程领域，我们的方法学可用于评估汽车片上系统（SOC）的鲁棒性。通过基于从多样化驾驶场景中随机采样，向该SOC的各个子组件注入故障，我们能够识别关键的失效模式并改进系统设计。</p>
+<h2>D. Case Study: Automotive SoC</h2>
+<p>故障注入在评估系统在故障条件下的韧性方面起着至关重要的作用。该技术的有效性在很大程度上取决于故障模型的选择以及系统内特定目标位置的识别。这些决策至关重要，因为它们确保测试期间注入的故障与系统的实际运行环境相关，并符合其安全要求。</p>
+<p>在本工作中，我们将故障注入应用于一个包含约三百万门电路的片上系统（System-on-Chip, SoC）设计。我们同时利用了基于仿真（simulation）和基于硬件仿真（emulation）的故障注入引擎来高效地执行故障注入实验，从而收集到全面的度量指标。作为下一步，我们计划引入形式化分析，以完成针对该汽车SoC的故障注入流程。图1给出了该SoC的高层次框图，其中突出显示了安全岛，这也是本节的重点。</p>
+<figure><img src="assets/p046/figures/fig_3.png" alt="" loading="lazy"></figure>
+<figure><img src="assets/p046/figures/fig_4.png" alt="Figure 1: 汽车SoC的典型表示" loading="lazy"></figure>
+<figcaption>Figure 1: 汽车SoC的典型表示</figcaption>
+<p>表1将SoC的失效率分解为其各个组成部分。需要注意的是，所提供的数值是经过缩放的，仅用于说明目的，以支持本文所讨论的示例，并不反映正在开发中的SoC的实际数值。</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th><th>2</th></tr></thead><tbody>
+<tr><td>Part</td><td>SubPart</td><td>Failure Rate</td></tr>
+<tr><td>SOC</td><td></td><td>155</td></tr>
+<tr><td></td><td>CPU</td><td>40</td></tr>
+<tr><td></td><td>NPU</td><td>20</td></tr>
+<tr><td></td><td>GPU</td><td>50</td></tr>
+<tr><td></td><td>Safety Island</td><td>10</td></tr>
+<tr><td></td><td>Memory</td><td>20</td></tr>
+<tr><td></td><td>Display</td><td>5</td></tr>
+<tr><td></td><td>PMU</td><td>10</td></tr>
+<tr><td></td><td>Others</td><td>10</td></tr>
+</tbody></table></div>
+<p>| 0    | 1             | 2            |</p>
+<figcaption>Table 1: SoC失效率向各子部件的分解</figcaption>
+<h2>D.1 Fault Model Selection</h2>
+<p>选择合适的故障模型对于准确模拟系统在其运行寿命期间可能经历的各种故障条件至关重要。在汽车片上系统（SoC）等安全敏感领域，这一点尤为关键，因为系统必须在各种故障条件下保持其完整性。故障模型必须涵盖对系统安全构成最大风险的故障类型，从而确保测试过程既严格又具有针对性。[10]</p>
+<p>常见的故障模型包括单事件翻转（SEU）、固定型故障（stuck-at fault）和瞬态故障，每种模型代表不同的失效机制。SEU 通常模拟由辐射等外部因素引起的软错误，而固定型故障则代表一种更为持久的失效，通常由制造缺陷或元件磨损导致。</p>
+<p>在我们的工作中，我们采用了一种综合性的故障模型，将瞬态故障和永久性故障整合在一起。这一方法源于现代 SoC 中失效模式的复杂性和多样性，故障的影响会因其性质不同而产生很大差异。模型中的瞬态故障用于模拟宇宙辐射等环境影响所产生的效应，这类影响可能导致软错误，但不会对硬件造成永久性损伤。相比之下，永久性故障用于表示长期存在的硬件问题，例如缺陷或随时间推移而产生的性能退化。</p>
+<p>通过将这两类故障纳入我们的模型，我们能够对系统的韧性进行全面而真实的评估。这种多层面的方法确保我们的故障注入活动覆盖广泛的潜在失效场景，从而提升被测 SoC 的鲁棒性和可靠性。[5]</p>
+<h2>D.2 Target Selection for Fault Injection</h2>
+<p>为故障注入选择目标位置是一个关键步骤，需要仔细考虑系统的架构及其各组件的重要性。在现代汽车片上系统（SoC）中，由于其集成了多个处理核心、存储器块和外设接口，在整个系统范围内均匀地注入故障既不切实际也不高效。因此，我们的方法侧重于优先选择对系统安全和运行可靠性至关重要的组件。</p>
+<p>我们采用分层方法进行目标选择，首先从失效模式与影响分析（FMEA）入手。该分析帮助我们识别 SoC 中最关键的组件，通常是那些参与安全关键功能的组件，例如实时控制算法、安全相关数据管理和通信接口。这些高优先级组件是故障注入的首要目标，因为这些区域发生的失效可能对系统的整体安全性和功能性产生最显著的影响。</p>
+<figure><img src="assets/p046/figures/fig_5.png" alt="" loading="lazy"></figure>
+<figure><img src="assets/p046/figures/fig_6.png" alt="" loading="lazy"></figure>
+<p>为了进一步细化目标选择，我们引入了基于风险的方法。这种方法不仅根据组件的功能重要性对其进行评估，还根据其暴露于环境因素的程度及其在维持系统安全方面的作用进行评估。被识别为高风险的组件——无论是由于其易受电磁干扰等环境条件的影响，还是由于其在安全机制中不可或缺的作用——在我们的故障注入活动中被赋予优先地位。</p>
+<p>这种有针对性的策略确保我们将测试资源集中在 SoC 中最脆弱且最关键的部分。通过这种方式，我们最大限度地提高了故障注入工作的有效性，确保系统最重要的功能得到充分测试，并针对潜在故障进行验证。这种方法不仅增强了 SoC 的可靠性，还确保系统满足汽车应用所要求的严格安全标准。</p>
+<h2>E. Statistical Random Sampling</h2>
+<p>统计随机抽样是故障注入测试中的一项关键技术，旨在无需穷尽式故障覆盖率的情况下有效评估复杂系统的韧性。鉴于大型系统中潜在故障场景数量庞大，受资源限制，测试每一种可能的故障通常并不现实。随机抽样通过选取一个能够涵盖潜在失效模式多样性的代表性故障子集来应对这一挑战。</p>
+<p>该方法确保所选故障能够为系统在故障条件下的行为提供有意义的洞察，同时显著减少测试所需的时间和计算量。通过聚焦于具有统计显著性的样本，我们无需完整的故障覆盖率即可对系统的鲁棒性得出可靠结论。</p>
+<p>在本节中，我们概述了可用于确定合适样本量（即待注入故障数量）或计算与测试结果相关的置信水平和误差范围的关键公式。这些计算对于确保随机样本能够有效且可靠地代表系统的潜在故障场景至关重要，从而实现准确且高效的故障注入测试。</p>
+<h2>E.1 Number of Faults to Inject</h2>
+<p>样本量 n，即（随机）选择用于注入的故障数量，可以参照以下因素用式 (1) 计算：[8]</p>
+<figure><img src="assets/p046/figures/fig_7.png" alt="" loading="lazy"></figure>
+<p>对于给定的样本量 n 和给定的置信水平，误差范围则可以反过来用式 (2) 计算。（图 3）</p>
+<h2>E.2 Conventional Statistical Random sampling</h2>
+<p>传统的统计随机抽样首先需要识别系统内全部潜在故障的总体。该总体涵盖多种类型的故障，包括单粒子翻转（single-event upset）、固定型故障（stuck-at fault）和瞬态故障（transient fault），它们分布在系统的不同组件中。每个故障都被赋予一个发生概率，该概率由组件的关键性、运行环境以及历史故障数据等因素决定。</p>
+<p>随后采用随机抽样算法从这些故障中选取一个子集用于注入。该算法确保选择过程无偏，所产生的子集在统计上能够代表整个故障总体。这种方法使我们无需注入每一个可能的故障即可探索广泛的故障行为，从而提高测试过程的效率。[3]</p>
+<p>对于我们的片上系统（SoC），其故障总体约为 4000 万，我们确定为了达到覆盖率目标并保持可接受的误差范围，每个随机样本应包含约 3,600 个故障。</p>
+<figure><img src="assets/p046/figures/fig_8.png" alt="" loading="lazy"></figure>
+<p>随后，这 3,600 个故障在 SoC 层级被注入以进行验证。检测到的故障总数（包括已观测和未观测的故障）被用于计算每个样本的总体故障覆盖率。鉴于我们的目标覆盖率为 90%，我们计算出误差范围（Margin of Error，MOE）为 ±1.19%，从而确保对被测 SoC 的鲁棒性具有很高的置信度。</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th><th>2</th><th>3</th></tr></thead><tbody>
+<tr><td>Sample</td><td>1</td><td>2</td><td>3</td></tr>
+<tr><td>Total detected</td><td>3125 (86.80%)</td><td>3050 (84.72%)</td><td>2870 (79.72%)</td></tr>
+</tbody></table></div>
+<p>| 0              | 1             | 2             | 3             |</p>
+<figcaption>Table 2: 与随机样本相关的故障覆盖率</figcaption>
+<figure><img src="assets/p046/figures/fig_9.png" alt="Figure 4: 每个样本中子部件覆盖率与顶层覆盖率的关联" loading="lazy"></figure>
+<figcaption>Figure 4: 每个样本中子部件覆盖率与顶层覆盖率的关联</figcaption>
+<p>在将此故障覆盖率整合到失效模式影响与诊断分析（FMEDA）中时，我们不得不在 SoC 层级对所有子部件应用统一的覆盖率，以反映 SoC 的整体故障覆盖率。然而，在对子部件层级的故障分布进行更深入的分析后，我们观察到了显著的不一致性。样本中的故障分布不均匀，在安全关键子部件及其失效率方面尤为明显。这种零散的分布凸显了统一覆盖率模型的局限性，因为它无法准确反映 SoC 不同子部件之间风险和关键性水平的差异。[9] [10]</p>
+<h2>E.2.1 Analysis and Results</h2>
+<p>我们基于随机采样的故障注入测试结果，为系统的行为与韧性提供了具有统计显著性的洞见。通过分析注入故障的汇总结果，我们能够对系统的整体鲁棒性做出有依据的结论：</p>
+<figure><img src="assets/p046/figures/fig_10.png" alt="" loading="lazy"></figure>
+<h2>E.3 Proposed approach: Constrained Random Sample</h2>
+<p>在故障注入测试中，提高随机采样的准确性至关重要，尤其是在具有层次化结构的复杂系统中。一种被称为约束随机采样的改进方法，利用领域特定的约束来增强采样过程。该方法根据各系统层次上的失效模式分布来调整故障的随机生成，确保故障注入活动既具有统计代表性，又能反映系统的实际风险状况。</p>
+<p>约束随机采样过程首先对系统不同层次内的失效模式分布进行详细分析。例如，在像汽车片上系统（SoC）这样的层次化系统中，各组件被组织成多个层级，如处理核心、存储单元、总线和外设接口，每个层级都有其独特的失效模式分布。[10]</p>
+<p>为了应用约束采样，我们首先根据观测到的或预期的失效率为每个层次确定一个缩放因子。该缩放因子作为一个乘数，用于在采样过程中调整从各层次级别选择故障的可能性。例如，如果与CPU相关的故障在统计上比Display模块中的故障更为常见，则缩放因子将提高从CPU层次选择故障的概率。</p>
+<p>通过分析每个组件的失效率并推导出相对失效率分布，我们可以对随机样本中故障的生成进行适当缩放。这确保了尽管故障是随机选择的，采样过程仍受缩放因子引导，以反映不同组件的相对失效率。下表展示了SoC层级随机样本的构成，说明了故障如何根据其失效率分布在各个子组件上。[9], [11]</p>
+<figure><img src="assets/p046/figures/fig_11.png" alt="" loading="lazy"></figure>
+<div class="tablewrap"><table><thead><tr><th>Part</th><th>SubPart</th><th>Failure Rate</th><th>Failure Rate Distribution</th><th>Sample</th></tr></thead><tbody>
+<tr><td>SOC</td><td></td><td>165</td><td></td><td>3600</td></tr>
+<tr><td></td><td>CPU</td><td>40</td><td>24.2%</td><td>870</td></tr>
+<tr><td></td><td>NPU</td><td>20</td><td>12.1%</td><td>436</td></tr>
+<tr><td></td><td>GPU</td><td>50</td><td>30.3%</td><td>1090</td></tr>
+<tr><td></td><td>Safety Island</td><td>10</td><td>6.1%</td><td>220</td></tr>
+<tr><td></td><td>Memory</td><td>20</td><td>12.1%</td><td>436</td></tr>
+<tr><td></td><td>Display</td><td>5</td><td>3.0%</td><td>108</td></tr>
+<tr><td></td><td>PMU</td><td>10</td><td>6.1%</td><td>220</td></tr>
+<tr><td></td><td>Others</td><td>10</td><td>6.1%</td><td>220</td></tr>
+</tbody></table></div>
+<p>| Part   | SubPart       |   Failure Rate | Failure Rate Distribution   |   Sample |</p>
+<figcaption>Table 3: 基于各子部件失效率分布的故障分布</figcaption>
+<p>当需要在子部件层级进行故障注入时，同样的方法也可应用于该层级的故障生成。通过考虑每个子部件的失效模式及其分布来保持粒度，这些失效模式及其分布随后被用作缩放因子，以指导这一更精细层级上的故障生成过程。</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th><th>2</th><th>3</th></tr></thead><tbody>
+<tr><td>SubPart</td><td>Failure Mode</td><td>Failure Mode Distribution</td><td>Faults/FM</td></tr>
+<tr><td>CPU</td><td></td><td>100%</td><td>870</td></tr>
+<tr><td></td><td>FM1</td><td>30%</td><td>260</td></tr>
+<tr><td></td><td>FM2</td><td>15%</td><td>131</td></tr>
+<tr><td></td><td>FM3</td><td>45%</td><td>392</td></tr>
+<tr><td></td><td>FM4</td><td>10%</td><td>87</td></tr>
+</tbody></table></div>
+<p>| 0       | 1            | 2                         | 3         |</p>
+<figcaption>Table 4: 基于子部件内失效模式分布的故障分布</figcaption>
+<figure><img src="assets/p046/figures/fig_12.png" alt="Figure 5: 各子部件故障与各失效模式故障的表示" loading="lazy"></figure>
+<figcaption>Figure 5: 各子部件故障与各失效模式故障的表示</figcaption>
+<figure><img src="assets/p046/figures/fig_13.png" alt="" loading="lazy"></figure>
+<p>我们取这3600个故障并在SoC层级执行故障注入以进行验证。检测到的（观测到的+未观测到的）故障总数被用于计算每个样本的总体故障覆盖率。基于随机样本中的故障以及我们90%的覆盖率目标，我们计算出误差幅度（MOE）为±1.19%。</p>
+<div class="tablewrap"><table><thead><tr><th>Part</th><th>SubPart</th><th>Failure Rate</th><th>Failure Rate Distribution</th><th>Sample</th><th>Coverage</th></tr></thead><tbody>
+<tr><td>SOC</td><td></td><td>165</td><td></td><td>3600</td><td>3450 (95.83%)</td></tr>
+<tr><td></td><td>CPU</td><td>40</td><td>24.2%</td><td>870</td><td>850 (97.70%)</td></tr>
+<tr><td></td><td>NPU</td><td>20</td><td>12.1%</td><td>436</td><td>401 (91.97%)</td></tr>
+<tr><td></td><td>GPU</td><td>50</td><td>30.3%</td><td>1090</td><td>1040 (95.41%)</td></tr>
+<tr><td></td><td>Safety Island</td><td>10</td><td>6.1%</td><td>220</td><td>197 (89.54%)</td></tr>
+<tr><td></td><td>Memory</td><td>20</td><td>12.1%</td><td>436</td><td>396 (90.82%)</td></tr>
+<tr><td></td><td>Display</td><td>5</td><td>3.0%</td><td>108</td><td>81 (75%)</td></tr>
+<tr><td></td><td>PMU</td><td>10</td><td>6.1%</td><td>220</td><td>204 (92.72%)</td></tr>
+<tr><td></td><td>Others</td><td>10</td><td>6.1%</td><td>220</td><td>201 (91.36%)</td></tr>
+</tbody></table></div>
+<p>| Part   | SubPart       |   Failure Rate | Failure Rate Distribution   |   Sample | Coverage      |</p>
+<figcaption>Table 5: 基于失效率分布的各子部件故障覆盖率</figcaption>
+<p>针对每个子部件的定向激励测试和引导式方法为故障注入收敛提供了良好且有效的收敛机制。</p>
+<div class="tablewrap"><table><thead><tr><th>0</th><th>1</th><th>2</th><th>3</th></tr></thead><tbody>
+<tr><td>Sample</td><td>1</td><td>2</td><td>3</td></tr>
+<tr><td>Total detected</td><td>3450 (95.83%)</td><td>3372 (93.67%)</td><td>3316 (92.11%)</td></tr>
+</tbody></table></div>
+<p>| 0              | 1             | 2             | 3             |</p>
+<figcaption>Table 6: 基于失效率分布的多样本故障覆盖率</figcaption>
+<h2>E.3.1 Results and Analysis</h2>
+<p>约束随机采样方法通过使用缩放因子（scaling factors）将工作重点集中于系统中最易发生故障的区域，从而提供了一种更为精细的故障注入策略。这种有针对性的方法同时提升了测试过程的效率与相关性。</p>
+<p>例如，在我们的案例研究中，约束随机采样的应用改善了对 CPU 子系统内关键失效模式的识别，而这些失效模式在传统采样方法中未能得到充分体现。这种改进的方法揭示了一些在无约束方法下可能被忽视的特定脆弱性，从而促成了有针对性的设计改进，并提高了系统可靠性。</p>
+<p>约束随机采样代表了故障注入中的一种精密技术，它将随机性与特定领域的约束相结合。通过采用由失效模式分布导出的缩放因子，该方法确保故障注入活动在统计上合理，并在战略上聚焦于系统的风险状况。这项技术在复杂的分层系统中尤为有益，因为在这类系统中，某些组件或子系统更易发生故障，需要进行详细分析。</p>
+<h2>F. Conclusion</h2>
+<p>本文提出了一种新颖的方法学，利用随机采样来增强跨多种系统工作负载的故障注入测试。在大型片上系统（SoC）的故障注入验证背景下，采样策略的选择对确定测试过程的有效性和准确性起着至关重要的作用。虽然传统随机采样提供了无偏的故障选择，但对于故障发生可能性在各个组件之间差异显著的复杂分层系统而言，它往往显得不足。</p>
+<p>我们的实验验证和对比分析表明，我们的方法在实现全面故障覆盖率的同时，最大限度地减少了资源使用。通过基于来自不同工作负载的随机样本来选择故障注入，我们在无需穷尽测试的情况下，保持了对系统脆弱性的均衡表征。</p>
+<p>此外，我们的方法便于对每个子部分内多个随机采样的结果进行汇总，从而对系统行为和鲁棒性产生具有统计显著性的洞察。这种方法使工程师能够精确定位关键失效模式，并设计出适应多种运行场景的更具弹性的系统。</p>
+<p>融合了失效模式分布加权的约束随机采样方法，通过使采样过程与系统的实际风险状况保持一致，提供了一种更优的替代方案。该方法具有以下几项优势：</p>
+<figure><img src="assets/p046/figures/fig_14.png" alt="" loading="lazy"></figure>
+<figure><img src="assets/p046/figures/fig_15.png" alt="" loading="lazy"></figure>
+<figure><img src="assets/p046/figures/fig_16.png" alt="Figure 6: 各子部件故障与各失效模式故障的表示（更高覆盖率与实际故障覆盖率）" loading="lazy"></figure>
+<figcaption>Figure 6: 各子部件故障与各失效模式故障的表示（更高覆盖率与实际故障覆盖率）</figcaption>
+<figure><img src="assets/p046/figures/fig_17.png" alt="" loading="lazy"></figure>
+<p>总而言之，经失效模式分布加权增强的约束随机采样，相对于传统随机采样方法，在大型SoC系统的故障注入验证中代表了重大进步。这种方法使采样过程与系统的实际失效特征保持一致，从而带来更高的故障覆盖率、更高效的资源利用以及对关键失效模式更准确的检测。对于安全关键和复杂系统而言，采用约束随机采样不仅是有益的——它对于获得可靠且有意义的验证结果至关重要。</p>
+<p>我们的研究通过提供一种在全面测试覆盖率与资源效率之间取得平衡的、论证充分的方法，推进了故障注入测试方法学的发展。未来的研究可以探索更多的采样策略，或集成机器学习技术，以在日益复杂的系统中进一步优化故障注入测试。</p>
+<h2>G. References</h2>
+<figure><img src="assets/p046/figures/fig_18.png" alt="" loading="lazy"></figure></div></div></body></html>

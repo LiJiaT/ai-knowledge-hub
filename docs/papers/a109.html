@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>通过从数万亿 token 中检索来改进语言模型（Retro）</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Improving language models by retrieving from trillions of tokens</h1>
+<p class="lead">通过从数万亿 token 中检索来改进语言模型（Retro）</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">RAG与检索</span><span class="chip">记忆管理</span><span class="chip">评测基准</span><span class="chip">可靠性与安全</span><span class="chip">成本与效率</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a109.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>该论文研究如何用外部检索增强自回归语言模型，把&#x27;知识记忆&#x27;从模型参数中解耦出来，作为参数规模化的互补路径。方法上提出 Retrieval-Enhanced Transformer（Retro）：将输入切分为 64 token 的 chunk，用冻结 BERT 嵌入在 2 万亿 token 的 key-value 库中做近似最近邻检索（SCaNN），检索邻居经可微分 encoder 编码后通过 chunked cross-attention 融入预训练全程，并支持把已有预训练模型快速 Retrofit 成检索模型。关键结论：7.5B 的 Retro 在 the Pile 上可比肩 178B Jurassic-1 与 280B Gopher（参数少约 25 倍），检索收益随模型规模与库规模持续增长，且在几乎无泄漏的评测块上仍稳定优于 baseline。对团队而言，这是大规模 RAG/检索增强的奠基性设计参考，其 chunk 级检索粒度、检索库与邻居数的扩展规律、以及评测泄漏量化方法，都可直接借鉴到知识库问答与上下文工程实践中。</p>
+<h2>问题</h2><p>大语言模型的性能提升通常依赖增加参数量，但参数带来的收益混合了&#x27;额外计算&#x27;与&#x27;对训练数据的记忆化&#x27;两个因素，且训练成本高昂。论文希望解耦二者：在不显著增加计算的前提下，让模型直接访问大规模外部文本数据库来完成预测（半参数化方法）。此前检索增强语言建模工作只在小模型（约 1 亿参数）和有限数据库（至多数十亿 token）上验证，缺乏万亿级检索库对大模型有效的证据。</p>
+<h2>方法</h2><p>提出 Retro 架构：将 n=2048 token 的序列切成 m=64 的 chunk；数据库以冻结 BERT 嵌入（对邻居 chunk N 的时间平均）为 key，value 为邻居 chunk 及其在原文中的后续 continuation F；用 SCaNN 做近似最近邻检索（2 万亿 token 库查询约 10ms），并过滤同文档邻居以保持因果性。检索邻居送入非因果 encoder（以当前 chunk 的中间激活做 cross-attention 条件化），decoder 每 3 层插入一个 Retro-block，通过 chunked cross-attention（Cca）算子融合检索信息，保持自回归性质；训练期邻居需预计算（在线检索跟不上训练速度）。另提出 Retrofitting：冻结预训练权重，只训练 Cca 与检索 encoder 新增权重，即可把任意 baseline transformer 改造成检索模型；并提出基于最长公共子串重叠度的 filtered bits-per-byte 方法，量化模型对评测集泄漏的利用程度。</p>
+<h2>关键结果</h2><p> 7.5B Retro 在 the Pile 上与 178B Jurassic-1、280B Gopher 相当，并在多数测试集上超过二者，参数量少约 25 倍；检索收益相当于把参数模型放大约 10 倍</p><p> 模型从 150M 扩展到 7B，Retro 在所有评测集（C4、Wikitext103、Curation Corpus、Lambada、the Pile、2021 年 9 月 Wikipedia）上均优于同规模 baseline，且收益不随模型规模衰减；Wikitext103 与 C4 上收益最大</p><p> 检索库从 Wikipedia（4B token）扩展到 MassiveText（1.7T token）带来显著性能提升；邻居数从 1 增到 10 持续提升，172M 模型受益至 10 个邻居，7B 模型受益至 40 个邻居（再多性能开始下降）</p><p> Retrofitting 只训练 7B 模型 &lt;10% 的新增权重、600 万条序列（预训练量的 3%），性能快速超过 baseline 并接近从头训练的 Retro；Wikitext103 上 Retrofit 困惑度 18.46（baseline 为 21.53）</p><p> Natural Questions 微调后与 Realm、RAG、Dpr 具有竞争力但不及 FiD；邻居数超过 20 不再带来提升</p><p> 泄漏分析：Retro 在所有泄漏水平上优于 baseline，直到 α=12.5%（与训练数据最长连续重叠不足 8 token 的 chunk）；但 Retro 比 baseline 更强地利用泄漏（bpb 斜率更负）</p><p> 工程开销：SCaNN 查询 2 万亿 token 库约 10ms；索引存储上 kNN-LM 对 4B token 的 Wikipedia 需 15TB，Retro 仅需 215Gb（MassiveText 为 93Tb）</p><p> 消融：只关注邻居贡献约 22% 的检索收益，关注邻居后续贡献约 56%，两者都关注最优；训练用 2 个邻居在效率上最优</p>
+<h2>创新点</h2><p>据作者所述，这是首个把检索数据库扩展到万亿 token 规模并用于大参数量语言模型的工作。与 kNN-LM/Continuous cache 等推理期输出插值方法不同，Retro 在架构内部通过 chunked cross-attention 深度融合检索内容，并在生成过程中按 chunk 反复检索；与 Realm 等端到端训练检索器的方法不同，采用冻结 BERT 检索器，避免训练中周期性重算全库嵌入，从而支撑超大规模；以 chunk 而非 token 为检索单元，使存储与计算需求大幅下降（kNN-LM 无法扩展到万亿 token）；此外提出 Retrofitting 快速改造已有模型的方法，以及量化评测集泄漏的 filtered bpb 评测方法学。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.5 评测与可靠使用</p><p><b>理由：</b>直接命中 3.1（RAG/检索增强）：本论文是大规模检索增强语言模型的奠基工作，其 chunk 级检索粒度选择、&#x27;邻居+continuation&#x27;的检索内容组织、检索库规模与邻居数 k 的扩展规律、冻结检索器与可微编码器的分工、检索内容融入生成的架构设计，都是团队构建知识库问答与组织上下文时的核心设计依据。同时命中 3.5：论文提出的 filtered bits-per-byte 泄漏量化方法可直接迁移到团队 RAG/LLM 评测集的泄漏审计；给出了检索降低幻觉的证据、检索模型的隐私与偏差风险分析，以及&#x27;更新检索库远比重训模型便宜&#x27;的成本效率论证。需要说明：论文本体是模型预训练架构研究，团队不会复现其训练部分，但其设计原则与评测方法学对&#x27;用好模型&#x27;的团队高度可迁移。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

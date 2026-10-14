@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基于 Chain-of-Thought 提示大语言模型（LLM）的少样本知识库问题生成（KBQG）</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Prompting Large Language Models with Chain-of-Thought for Few-Shot Knowledge Base Question Generation</h1>
+<p class="lead">基于 Chain-of-Thought 提示大语言模型（LLM）的少样本知识库问题生成（KBQG）</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">思维链与推理</span><span class="chip">其他</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a523.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文研究知识库问题生成（KBQG）：把逻辑形式转成自然语言问题，且要在少样本、不微调的条件下完成。方法上提出 KQG-CoT 提示框架：先对无标注逻辑形式做结构编码（实体/关系替换为符号）、用 Sentence-Transformers 嵌入并 K-means 聚类，选出句法多样且语义有代表性的示例；再为每个示例手工撰写 CoT 推理链，把复杂问题生成拆成逐层嵌套的子问题步骤，KQG-CoT+ 还按逻辑形式跳数升序排列示例。在 WebQuestions、PathQuestions、GrailQA 上用 text-davinci-003 实验，全面超过 Auto-CoT、Active-CoT 等提示基线，仅用 12 个示例即在 PathQuestions 上超过少样本 SoTA 达 18.25（BLEU-4）等绝对分值，并接近全量训练系统。对团队而言，这是一份『示例选择+CoT 分解+示例排序』的可复用提示工程配方。</p>
+<h2>问题</h2><p>KBQG 要求把知识库逻辑形式转换为语义一致的自然语言问题，可用于 QA 系统数据增强与对话系统。现有方法依赖大规模标注数据微调，在低资源场景下面临三大挑战：标注数据稀缺导致微调不可行；逻辑形式由实体、关系与查询语法组合而成，数据不足带来组合泛化困难；含聚合、比较、最高级等操作的复杂逻辑形式难以表达。论文要解决的是：如何在不训练（training-free）的前提下，通过提示冻结 LLM 完成少样本 KBQG。</p>
+<h2>方法</h2><p>提出 KQG-CoT 两阶段提示框架。第一阶段 Supportive Logical Forms Selection：把逻辑形式中的关系替换为 &#x27;r&#x27;、实体替换为 &#x27;e&#x27; 得到抽象查询图结构，用 Sentence-Transformers（all-MiniLM-L6-v2）编码后以 K-means 聚成 k=12 簇，再按语义多样性贪心采样，选出兼顾句法与语义代表性的逻辑形式，并把实体替换为 KB 中的表面名称。第二阶段 Prompt Construction：为每个示例手工撰写 CoT 推理链，以嵌套方式把逻辑形式逐层分解为子图与子问题，从一跳简单问题迭代扩展到完整复杂问题；推理时拼接全部示例与待查询逻辑形式，取 LLM 输出的最后一个子问题作为最终预测。KQG-CoT+ 进一步按逻辑形式跳数（复杂度）升序排列示例。全程不更新模型参数，使用 text-davinci-003 推理。</p>
+<h2>关键结果</h2><p> KQG-CoT+ 在 PathQuestions 上超过已有少样本 SoTA：BLEU-4、METEOR、ROUGE-L 分别提升 18.25、10.72、10.18 个绝对点</p><p> KQG-CoT+ 在全部三个数据集上比最强提示基线 Auto-CoT 提升 0.72 至 2.12 个绝对值</p><p> 在 WebQuestions 上仅用 12 个示例，KQG-CoT+ 取得 BLEU-4 29.73%、ROUGE-L 31.08%、METEOR 55.46%，接近全量训练 SoTA 并超过多数全量训练系统</p><p> 在 PathQuestions 上 BLEU-4 比少样本方法 AutoQGS 高约 20 个绝对点，而 AutoQGS 用了 0.1% 训练实例，本文仅用 12 个推理实例</p><p> 人工评测（WQ 测试集随机抽 300 例、3 名标注者、1-5 分制）显示本方法在句法正确性、复杂度、相关性上超过所有对比方法且接近 ground truth</p><p> 消融实验：去掉 CoT 推理链、K-means 聚类或结构编码均导致性能下降，验证三个组件均有效</p><p> 用本方法做数据增强（增强集仅为原数据集一半大小）训练 RnG-KBQA，F1 提升 2.8%</p><p> 示例数量 k 增大时 BLEU-4 与 ROUGE-L 持续上升，且本方法比 Random-CoT 增益更大；按跳数升序排序示例的效果优于随机、长度、不确定性与相似度排序</p>
+<h2>创新点</h2><p>据论文所述，这是首个用冻结 LLM 做 training-free 少样本 KBQG 的工作（相关工作中明确指出此前无 LLM 用于少样本 KBQG 的研究）。与通用 CoT 提示方法（Auto-CoT、Active-CoT、Random-CoT、Manual-CoT）的区别在于任务定制化：针对逻辑形式『程序结构+schema 项』的特点设计结构编码与聚类选例，用嵌套分解的子问题推理链替代叙述式 rationale，并按逻辑形式复杂度（跳数）排序示例；与 Xiong et al. (2022) 的低资源方法区别在于不需要微调、使用冻结 LLM。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程</p><p><b>理由：</b>论文是典型的提示工程研究，直接命中 3.2 的核心技术：CoT 推理提示设计、in-context learning 示例选择（结构编码+K-means 聚类+多样性采样）与示例排序（按复杂度升序），且消融实验逐一验证了各组件贡献。这套『选例-分解-排序』配方与团队在代码生成、测试辅助、知识库问答中构建提示的工作流高度同构，可直接借鉴；同时论文展示了用冻结 LLM 加少量示例替代微调的低资源路径，契合团队『用好模型而非训练模型』的定位。需注意任务本身（KBQG over 逻辑形式）不是团队的工程场景，落地需做领域迁移。</p><p><b>建议动作：</b>作为方法参考存档</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

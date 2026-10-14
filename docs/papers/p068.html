@@ -1,0 +1,196 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>闭环安全验证：FMEDA 驱动的 Fault Simulation 与面向高效故障分类的 Advanced Debug</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Closing the safety Verification Loop, FMEDA Driven Fault Simulation and Advanced Debug for Efficient Fault Classification</h1>
+<p class="lead">闭环安全验证：FMEDA 驱动的 Fault Simulation 与面向高效故障分类的 Advanced Debug</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">DVCon 2026</span><span class="chip">功能安全标准</span><span class="chip">安全机制</span><span class="chip">诊断覆盖率</span><span class="chip">故障注入</span><span class="chip">FMEDA</span><span class="chip">安全验证</span><span class="chip">故障诊断</span><span class="chip">2.5 功能安全与安全机制</span><span class="chip">2.6 Fault simulation/ZOIX/TFMEA</span><span class="chip">2.7 CyberSec/自动化</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/p068.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文针对 ISO 26262 功能安全验证中 FMEDA 与 fault simulation 长期割裂、故障列表通用未过滤、缺乏可追溯性导致多轮迭代与收敛困难的问题，提出由 FMEDA 输出直接驱动 fault simulation 的闭环方法。方法在 ISO 26262 part 11 定义的 elementary subpart 粒度解析 FMEDA 数据，借助 Synopsys VC FSM 自动生成 safety verification plan，将 failure mode 映射到 RTL/gate-level 可仿真故障模型，再以 STL workload 模拟在役诊断行为、按安全机制设置 strobe 点，迭代执行 FSIM 直至达到 FMEDA 定义的目标 DC，并对未分类故障引入 AI 辅助 debug（论文注明该阶段仍在进行中）。在配备多个安全机制的量产 automotive SoC block 上验证：故障规模减少超 33%，人工 debug 工作量减少近 66%，算力资源节省 3-5×，SPFM/LFM 覆盖率与传统方法持平或更优，且每个 FSIM 检测结果与 FMEDA 条目一一映射形成可审计闭环。该方法与本团队 2.5/2.6 域的 FuSa TFMEA/FMEDA 与 fault simulation 关联论证工作高度契合。</p>
+<h2>问题</h2><p>ISO 26262 要求证明 parity/ECC、watchdog、lockstep、reset monitor 等安全机制能检测或控制相关硬件故障，并以 SPFM/LFM 量化、ASIL-D 要求未检测单点故障低于极小阈值。但工业界现有流程中 FMEDA（定义需保护的对象与安全机制）与 fault simulation（度量 DC 覆盖）相互独立执行，导致重复工作、假设不一致、可追溯性缺口：FMEDA 识别的故障未直接映射到仿真 campaign，缺乏安全上下文引发多轮迭代、难以跟踪，安全验证收敛困难。</p>
+<h2>方法</h2><p>建立 FMEDA 输出到 fault simulation 环境的直接数据驱动链路：(1) 在 elementary subpart 级解析 FMEDA 数据，提取 failure mode、受影响模块、DC 目标与安全目标，使每次故障注入可回溯至 FMEDA 原始条目；(2) 用 Synopsys VC FSM 自动生成 safety verification plan，将每个 FMEDA failure mode 映射到 RTL/gate-level 的一个或多个可仿真故障模型与区域；(3) gate-level 故障注入，campaign 按安全相关性优先排序，ASIL 关键单元先验证；(4) 用 Software Test Libraries (STLs) 模拟在役诊断行为作为 workload，基于 FMEDA 安全机制选取 strobe 观测点；(5) 迭代 FSIM：分析 undetected faults（blocked propagation、missing strobe、stimuli 不足）并精化 workload 与观测逻辑；(6) 对仍未分类的故障用 AI/ML 做结构分析、故障行为模式识别与根因预测（进行中）；(7) DC 达标后正式分析、证明并关闭 block。</p>
+<h2>关键结果</h2><p> 相比传统穷举故障注入方法，故障规模（fault population）减少超过 33%</p><p> 人工 debug 工作量减少近 66%</p><p> 计算资源占用降低 3-5×</p><p> 在配备多个安全机制的量产 automotive SoC block 上完成验证，证明可扩展性与工业适用性</p><p> SPFM/LFM 诊断覆盖率达到与传统方法相同或更好水平</p><p> 每个 FSIM 检测结果映射到对应 FMEDA 条目，形成一对一可追溯闭环，消除冗余故障 campaign</p>
+<h2>创新点</h2><p>主要区别在于打破传统流程中 FMEDA 与 fault simulation 各自独立、故障列表通用且未过滤的模式：以 elementary subpart 粒度从 FMEDA 数据精确界定需仿真的故障、相关检测机制与安全覆盖指标，通过 VC FSM 自动生成验证计划，实现 FMEDA 条目与仿真证据的一对一映射和审计就绪；同时将故障分类 debug 升级为 AI 辅助的结构分析与根因预测，并把 fault simulation 从统计性工作转变为可重复、可追溯、符合标准的验证方法学。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>2.5 功能安全与安全机制 | 2.6 Fault simulation/Z01X/TFMEA | 2.7 CyberSec/自动化</p><p><b>理由：</b>论文直接命中 2.5 域核心技术（ISO 26262、FMEDA、SPFM/LFM、DC 目标、安全机制验证与 safety case 证据）和 2.6 域核心技术（基于功能 stimulus/STL 的 gate-level fault injection、fault grading、FuSa TFMEA/FMEDA 论证与 fault simulation 的关联）。其 FMEDA→验证计划自动生成、迭代覆盖跟踪与 AI 辅助故障分类也与 2.7 域的自动化流程和 AI 辅助 DFT 流程直接相关。团队在 LPDDR/HBM4/UCie 等 IP 上开展 FuSa TFMEA/FMEDA 与 fault simulation 关联论证时，本文提供了可直接借鉴的闭环方法学与量化收益基准。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><h2>Closing the safety Verification Loop, FMEDADriven Fault Simulation and Advanced Debug for Efficient Fault Classification</h2>
+<p>Sagar Hema Vidya，硅设计工程高级经理 - AMD 海得拉巴（hema.vidya.sagar@amd.com）</p>
+<p>Vedant Garg，解决方案架构师 - Synopsys 奥斯汀（vedantg@synopsys.com）Sudhakar Chappidi，技术高级成员（SMTS）硅设计工程师 - AMD 海得拉巴（Sudhakar.Chappidi@amd.com）Sharon Monica Kurmana，高级硅设计工程师 - AMD 海得拉巴（sharon.monica.kurmana@amd.com）</p>
+<h2>1. Abstract</h2>
+<p>向自主出行的快速迈进正在重塑汽车行业格局，并加速半导体技术的演进。随着制造商追求更高的集成密度和更低的工作电压，现代半导体越来越容易受到随机硬件失效的影响，这类失效可能在器件生命周期内不可预测地发生。高级驾驶辅助系统（ADAS）和自动驾驶车辆（AV）功能依赖这些数字与模拟系统来执行关键的实时应用，这对其验证与安全性提出了至关重要的问题。</p>
+<p>ISO 26262 和 IEC 61508 等功能安全标准要求对硬件安全机制进行全面分析，这通常通过失效模式、影响与诊断分析（FMEDA）来实施。然而，传统的验证和故障仿真流程往往独立于 FMEDA 活动运行，从而导致脱节。未结合 FMEDA 识别出的故障可能无法直接映射到仿真活动中，而缺乏这种安全上下文会导致多轮迭代、缺乏跟踪，并给实现稳健的安全验证收敛带来挑战。</p>
+<p>本文提出一种方法学，将 FMEDA 输出与故障仿真执行直接衔接，从而实现一种验证驱动的方法，使仿真活动能够精确地根据 FMEDA 结果进行定制。通过利用 FMEDA 数据，该方法精确定义了必须仿真哪些故障、指定相关的检测机制，并建立与安全相关的覆盖率指标。</p>
+<p>本工作的另一项贡献是一种先进的调试方法学，用于解决故障分类中的歧义问题——这在大规模故障仿真活动中正日益成为一项关键需求。本文详细阐述了：</p>
+<p>本工作将使验证工程师、功能安全经理和电子设计自动化（EDA）工具开发人员受益，既提供方法学上的进步，也提供可适用于汽车、航空航天和工业领域安全关键设计的实用见解。</p>
+<h2>2. Introduction and Problem Statement</h2>
+<p>功能安全标准（如 ISO 26262）要求硬件设计证明其安全机制能够可靠地检测或控制可能导致危险行为的故障。随着片上系统（SoC）复杂度的不断提升，要在不投入过多人工工作或仿真成本的前提下证明安全覆盖率目标已经达成，变得极具挑战性 [1][5]。</p>
+<p>在实践中，安全验证依赖于两项活动：</p>
+<p>FMEDA 定义了需要保护的对象及其安全机制，而故障仿真则衡量安全机制所实现的诊断覆盖率（DC）。尽管这两项活动都指向相同的安全目标，但它们通常被独立执行，从而导致重复劳动、假设不一致以及可追溯性方面的缺口。这促使人们需要一种将 FMEDA 意图直接与仿真证据相关联的统一方法 [4]。</p>
+<h2>A. Faults, Errors, and Failures</h2>
+<p>当元器件不再执行其预期功能时，就会发生失效。其分类如下：</p>
+<p>这两个类别需要不同的缓解策略，但只有随机硬件故障才计入 ISO 26262 的诊断覆盖率（DC）。因此，我们的重点是在门级对随机硬件故障进行建模和验证。</p>
+<figure><img src="assets/p068/figures/fig_1.png" alt="Figure 1 故障（Fault）、错误（Error）、失效（Failure）之间的关系" loading="lazy"></figure>
+<figcaption>Figure 1 故障（Fault）、错误（Error）、失效（Failure）之间的关系</figcaption>
+<h2>B. Safety Mechanisms and ISO 26262 Metrics</h2>
+<p>ISO 26262 要求设计人员证明，诸如奇偶校验/ECC（纠错码）、看门狗、锁步或复位监控器等已实现的安全机制能够检测或控制相关的硬件故障。该标准使用单点故障度量（SPFM）和潜伏故障度量（LFM）指标对此进行量化，这些指标取决于有多少故障被：</p>
+<p>要达到 ASIL-D，需要提供证据表明未检测到的单点故障保持在极小的阈值以下。这就催生了对与 FMEDA 相关联的准确且可追溯的故障分析的需求。</p>
+<h2>C. FMEDA and Fault Simulation</h2>
+<p>FMEDA 用于识别哪些元件需要安全机制，以及能够达到何种诊断覆盖率（DC）。故障仿真通过注入故障并检查安全机制是否正确响应，从而提供实验证据。</p>
+<p>然而，在当前的工业流程中，这两项活动是相互脱节的：</p>
+<p>这些差距造成了效率低下，并带来安全意图与验证结果之间出现偏差的风险。一种将 FMEDA 条目自动关联到针对性故障仿真的方法可以避免这些问题。</p>
+<h2>3. Proposed Methodology</h2>
+<p>本文所提出的方法在 FMEDA 输出与故障仿真环境之间建立了直接的、数据驱动的关联，有效地闭合了验证闭环，确保故障分析可追溯、高效且聚焦于安全。与 FMEDA 和故障仿真各自独立运行的传统流程不同，这种集成方法使仿真活动直接对准与安全相关的设计元素，从而减少冗余并提升覆盖率置信度。</p>
+<h2>A. FMEDA Data Extraction (Elementary Subpart Level)</h2>
+<p>流程的第一步是在基本子部件（elementary subpart）层级解析 FMEDA 数据，提取诸如失效模式、受影响模块、诊断覆盖率（DC）目标以及相关安全目标等信息。这种结构化提取确保仿真期间注入的每一个故障都有明确的依据，并可追溯至原始 FMEDA，从而强化合规文档与审计就绪能力。通过在基本子部件层级开展工作，该流程还允许对安全验证进行细粒度控制，避免对非安全关键信号进行不必要的仿真 [5][6]。基本子部件的定义如 ISO 26262 第 11 部分所定义，如图 2 所示。起源于扇入至基本子部件（时序元件）的门电路中的固定型故障（stuck at fault），最终该错误具有导致失效的潜在可能。</p>
+<figure><img src="assets/p068/figures/fig_2.png" alt="Figure 2 基本子部件定义" loading="lazy"></figure>
+<figcaption>Figure 2 基本子部件定义</figcaption>
+<h2>B. Fault Mapping and Safety Verification Plan Generation</h2>
+<p>一旦提取出 FMEDA 目标，便会生成故障仿真计划。该故障仿真验证计划通过使用 Synopsys 的 FMEDA 工具（VC FSM）实现自动化完成。该计划将每个由 FMEDA 定义的失效模式映射到 RTL 或门级表示中的一个或多个可仿真的故障模型及区域。主要特性包括：</p>
+<figure><img src="assets/p068/figures/fig_3.png" alt="Figure 3 安全验证计划定义" loading="lazy"></figure>
+<figcaption>Figure 3 安全验证计划定义</figcaption>
+<p>这一步骤对于在保持与安全目标完全一致的前提下减少验证工作量至关重要，相较于传统方法中故障列表通用且未经筛选的做法，这是一项重大改进。</p>
+<h2>C. Fault Simulation Execution</h2>
+<p>精确理解安全相关故障及其在设计中的映射，对于开展高效的故障仿真活动至关重要。如果故障集合定义不清晰，仿真运行可能变得不完整或规模不必要地庞大。为避免这种情况，执行流程首先提取细粒度的 FMEDA 数据，并生成具有针对性且经过优先级排序的故障仿真计划。这确保了仿真资源得到高效利用、诊断响应得到正确解读，并且所得的覆盖率指标准确反映 ISO 26262 安全目标。[2]</p>
+<p>故障仿真阶段利用多种优化与自动化技术，以最大化效率和诊断覆盖率（DC）。所选故障在门级注入，并基于安全机制对诊断响应进行监测。仿真活动按安全相关性排定优先级，确保 ASIL 关键元素得到优先验证。</p>
+<p>为改进故障仿真执行，采用了以下几种先进技术：</p>
+<figure><img src="assets/p068/figures/fig_4.png" alt="Figure 4 故障样本数与故障总数对比" loading="lazy"></figure>
+<figcaption>Figure 4 故障样本数与故障总数对比</figcaption>
+<h2>D. Iterative FSIM flow to achieve target DC.</h2>
+<p>图 5 展示了从故障提取开始的总体流程，以及该流程如何将基本子部件 FMEDA 与故障仿真流程相集成。图 6 展示了迭代式 FSIM（故障仿真）流程，该流程用于实现 FMEDA 中定义的目标诊断覆盖率（DC）。该流程从故障提取开始，如第 3 节所述，其中基于 FMEDA 数据识别与安全相关的故障。</p>
+<h2>· Workload Definition :</h2>
+<p>在故障提取之后，需定义适当的测试激励，以激活与每个 FMEDA 分区相关联的安全机制。软件测试库（Software Test Libraries, STLs）用于模拟真实的现场诊断行为并触发故障响应。</p>
+<h2>· Strobe Point Selection :</h2>
+<p>基于 FMEDA 安全机制，在 FSIM 环境中添加关键观测点（strobes，选通点）。选通点确保故障效应被正确捕获，并与预期的诊断响应相关联。[2][5]</p>
+<h2>· Fault Simulation and Analysis :</h2>
+<p>使用所选的软件测试库（STL）进行故障仿真，以验证 FMEDA 范围内的诊断覆盖率（DC）。仿真完成后，对任何未检测到的故障进行分析，以识别诸如传播路径被阻断、选通点缺失或测试激励不足等潜在问题。利用这些反馈，对工作负载和观测逻辑进行迭代改进，以提高诊断覆盖率并消除验证缺口。[2]</p>
+<h2>· Advanced Fault Debug and Classification :</h2>
+<p>对于仍未被分类或存在歧义的故障，采用人工智能（AI）进行更深层次的结构分析，识别故障行为模式并预测根本原因。机器学习模型通过将故障动态地分类为明确的类别，并建议有针对性的故障注入以提升覆盖率，从而帮助解决检测中的不确定性；该阶段目前正在进行中。</p>
+<h2>· Final Validation:</h2>
+<p>一旦达到 DC 目标，即对结果进行分析并进行形式化证明，随后关闭该模块。</p>
+<h2>4. Faults Analysis</h2>
+<p>故障仿真完成后，仍存在一些未解决的故障，需要使用调试技术进行分析。本节总结了如何对每个故障进行可观测性、可控性和诊断可见性评估，以确定其安全相关性。如表 1 所述，该分析通过在结构层面和功能层面审查信号传播与屏蔽情况，识别出哪些故障是安全的、哪些可能影响安全目标。总体而言，该流程确保只有影响安全的故障才会被标记出来，以进行进一步的诊断处理。</p>
+<div class="tablewrap"><table><thead><tr><th>Reference</th><th>Type</th><th>Block/Example</th><th>Safety Reason</th><th>Diagnostic Logic</th></tr></thead><tbody>
+<tr><td>Figure 7</td><td>Safe</td><td>Scan FF (fault on CP / D / Q, SE=0).</td><td>Fault cannot reach functional logic</td><td>Scan disabled, path masked</td></tr>
+<tr><td>Figure 8</td><td>Safe</td><td>Clock Gate (EN S@0).</td><td>No impact on functional data/control</td><td>Clock toggles but logic unaffected</td></tr>
+<tr><td>Figure 8</td><td>Detect by Analysis</td><td>RAM ECC (other banks)</td><td>Behavior same across all the banks</td><td>ECC guaranteed detect/correct</td></tr>
+</tbody></table></div>
+<p>| Reference   | Type               | Block/Example                        | Safety Reason                        | Diagnostic Logic                   |</p>
+<figcaption>Table 1 故障分析</figcaption>
+<figure><img src="assets/p068/figures/fig_5.png" alt="Figure 6 迭代故障仿真流程" loading="lazy"></figure>
+<figcaption>Figure 6 迭代故障仿真流程</figcaption>
+<figure><img src="assets/p068/figures/fig_6.png" alt="Figure 5 故障提取与故障仿真流程" loading="lazy"></figure>
+<figcaption>Figure 5 故障提取与故障仿真流程</figcaption>
+<figure><img src="assets/p068/figures/fig_7.png" alt="Figure 7 安全故障，注入扫描逻辑（Scan logic）的故障" loading="lazy"></figure>
+<figcaption>Figure 7 安全故障，注入扫描逻辑（Scan logic）的故障</figcaption>
+<figure><img src="assets/p068/figures/fig_8.png" alt="" loading="lazy"></figure>
+<h2>5. FSIM Results and Conclusion</h2>
+<p>基于 FMEDA 驱动的故障仿真方法为汽车 SoC 的安全验证引入了一种结构化且符合 ISO 26262 的途径。FSIM 的每个检测结果都会映射到其对应的 FMEDA 条目，从而在仿真故障行为与其关联的安全目标或诊断机制之间建立一一对应的关系。该过程建立了一个闭环系统，确保可追溯性、准确性和审计就绪性。这种对齐消除了冗余的故障仿真活动，并提升了 SPFM 和 LFM 等关键安全指标。[3]</p>
+<div class="tablewrap"><table><thead><tr><th>Stage</th><th>Flop count</th><th>Faults Count</th><th>Simulation Time (days)</th></tr></thead><tbody>
+<tr><td>Design subblock Scale</td><td>26939</td><td>67,780</td><td>15</td></tr>
+<tr><td>For the target FMEDA Design subblock</td><td>3562</td><td>11,604</td><td>4</td></tr>
+<tr><td>After Sampling</td><td>3562</td><td>7,809</td><td>2</td></tr>
+</tbody></table></div>
+<p>| Stage                                |   Flop count |   Faults Count |   Simulation Time (days) |</p>
+<figcaption>Table 2 传统流程与FMEDA驱动流程的对比</figcaption>
+<p>该流程还支持跨迭代的自动化进度跟踪，使工程师能够清晰地识别覆盖率缺口、残余故障趋势以及需要细化工作量的领域。最终，这种方法确保每一个仿真故障都能切实服务于某个安全目标，将故障仿真从一种统计性练习转变为一种结构化、符合标准的验证方法，以可量化的证据支持 ISO 26262 安全论证的开发。</p>
+<figure><img src="assets/p068/figures/fig_9.png" alt="Figure 9 故障数量与仿真时间的关系" loading="lazy"></figure>
+<figcaption>Figure 9 故障数量与仿真时间的关系</figcaption>
+<p>与传统的穷举式故障注入方法相比，所提出的流程带来了可衡量的效率提升：故障数量减少超过 33%，人工调试工作量减少近 66%，计算资源利用率降低 3 - 5×。这些改进在一款配备多种安全机制的量产汽车 SoC 模块上得到了验证，展示了其对包含数千个安全相关故障的下一代设计的可扩展性和工业适用性。[2]</p>
+<div class="tablewrap"><table><thead><tr><th>Metric</th><th>Traditiona l Flow</th><th>Proposed- Flow</th><th>Improvem ent</th></tr></thead><tbody>
+<tr><td>Faults Simulated</td><td>11,604</td><td>7,809</td><td>↓ 33%</td></tr>
+<tr><td>Traceable Faults</td><td>65%</td><td>92%</td><td>↑ 42%</td></tr>
+<tr><td>Unresolved Faults</td><td>~4000</td><td>~600</td><td>↓ 85%</td></tr>
+<tr><td>Manual Debug Time</td><td>6 weeks</td><td>2 weeks</td><td>↓ 66%</td></tr>
+<tr><td>Audit readiness</td><td>Partial</td><td>Full</td><td>✓</td></tr>
+</tbody></table></div>
+<p>| Metric            | Traditiona l Flow   | Proposed- Flow   | Improvem ent   |</p>
+<figcaption>Table 3 传统流程与FMEDA驱动流程的对比</figcaption>
+<figure><img src="assets/p068/figures/fig_10.png" alt="Figure 10 故障仿真结果" loading="lazy"></figure>
+<figcaption>Figure 10 故障仿真结果</figcaption>
+<p>总体而言，这种数据驱动的方法不仅达到了与传统方法相同或更好的诊断覆盖率（SPFM/LFM），而且具备更强的可扩展性和审计就绪性。该流程有效地将故障仿真从一项资源密集型工作转变为一种可重复、可追溯且符合标准的验证方法，为 ASIL 覆盖在准确性和效率两方面带来可量化的收益，从而闭合了安全验证回路。</p>
+<h2>6. Acronyms &amp; References</h2>
+<div class="tablewrap"><table><thead><tr><th>Acronym</th><th>Full Form / Description</th></tr></thead><tbody>
+<tr><td>ASIL</td><td>Automotive Safety Integrity Level</td></tr>
+<tr><td>DC</td><td>Diagnostic Coverage</td></tr>
+<tr><td>ESE</td><td>Elementary Subpart Extraction</td></tr>
+<tr><td>FMEDA</td><td>Failure Modes, Effects and Diagnostic Analysis</td></tr>
+<tr><td>Fsafe</td><td>Safe Fault (Faults with no safety impact)</td></tr>
+<tr><td>LFM</td><td>Latent Fault Metric</td></tr>
+<tr><td>S@1 / S@0</td><td>Stuck-at-1 / Stuck-at-0 Fault Model</td></tr>
+<tr><td>SM</td><td>Safety Mechanism</td></tr>
+<tr><td>SPFM</td><td>Single Point Fault Metric</td></tr>
+<tr><td>STL</td><td>Software Test Library</td></tr>
+</tbody></table></div>
+<p>| Acronym   | Full Form / Description                        |</p></div></div></body></html>

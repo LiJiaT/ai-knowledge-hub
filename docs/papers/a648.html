@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基于大语言模型（LLM）的要素感知摘要：专家对齐评测与思维链（Chain-of-Thought）方法</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Element-aware Summarization with Large Language Models: Expert-aligned Evaluation and Chain-of-Thought Method</h1>
+<p class="lead">基于大语言模型（LLM）的要素感知摘要：专家对齐评测与思维链（Chain-of-Thought）方法</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">思维链与推理</span><span class="chip">评测基准</span><span class="chip">可靠性与安全</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a648.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>该论文针对 CNN/DailyMail 与 BBC XSum 等主流新闻摘要数据集参考摘要存在事实幻觉与信息冗余、导致自动评测与人类偏好不一致的问题，邀请三位新闻专家按 &#x27;Lasswell Communication Model&#x27;（5W1H）协议重写参考摘要，构建了各含 200 条样本的 Element-aware 测试集。基于新测试集，作者发现 zero-shot GPT-3 的摘要能力与强 fine-tuned PLM 相当甚至在 BBC XSum 上大幅领先，解释了此前 GPT-3 人类偏好高但自动指标低的矛盾。进一步提出 Summary Chain-of-Thought（SumCoT）两阶段提示方法：先用人工设定的引导问题抽取 Entity、Date、Event、Result 四类核心要素，再整合要素与原文细节逐步生成摘要。实验显示 SumCoT 在两个数据集上 ROUGE-L 分别超过此前 SOTA +4.33/+4.77，且该能力是模型规模的涌现能力，仅在最大模型上有效。</p>
+<h2>问题</h2><p>主流新闻摘要数据集（CNN/DailyMail、BBC XSum）的参考摘要存在事实幻觉与信息冗余等噪声，导致 LLM zero-shot 摘要的人类偏好与自动评测指标结果不一致（如 Goyal et al. (2022) 观察到的 GPT-3 现象），且缺乏能客观、全面评估 LLM 细粒度摘要写作能力的可靠评测基准。</p>
+<h2>方法</h2><p>两条主线：(1) 评测基准构建——依据 &#x27;Lasswell Communication Model&#x27;（5W1H）让三位新闻专家为两个数据集各 200 篇文档重写参考摘要，写作协议包含微观要求（摘要必须忠实覆盖 Entity、Date、Event、Result 四要素）与宏观要求（Fluency、Coherence、Consistency、Relevance 四维度），并用 Precision/Recall/F1 度量测试集的要素覆盖特性；(2) SumCoT 两阶段提示流水线——Stage 1 通过人工设定的引导问题让 LLM 逐项抽取四类核心要素，Stage 2 将引导问题与 LLM 输出的答案打包，引导 LLM 聚焦关键细节、按要素感知的写作模式逐步生成最终摘要。</p>
+<h2>关键结果</h2><p> 在 Element-aware 测试集上，zero-shot GPT-3（175B text-davinci-002）与 fine-tuned PLM（BART、T5、PEGASUS）竞争力相当，并在 BBC XSum 上以明显优势领先；相比 dataset-specific 测试集，GPT-3 的 ROUGE-1/2/L 在 CNN/DailyMail 提升 +7.65/+6.22/+6.74，在 BBC XSum 提升 +11.75/+7.26/+9.56，而 fine-tuned PLM 性能下降</p><p> SumCoT 相比标准 GPT-3 与此前 SOTA，ROUGE-1/2/L 在 CNN/DailyMail 提升 +5.05/+1.35/+4.33，在 BBC XSum 提升 +3.96/+4.36/+4.77；以 ROUGE-L 计超过 SOTA +4.33/+4.77</p><p> 人类评估（7 点 Likert 量表，Fluency/Coherence/Consistency/Relevance 四维度）显示 GPT-3 摘要几乎在所有维度优于数据集原生与其他模型生成摘要；SumCoT 进一步在所有维度提升，尤其是 coherence 与 relevance</p><p> 要素抽取质量：除 Date 外各要素抽取 F1 表现优异；错误分析归纳出 Date 幻觉（为原文不存在的日期强行抽取）与要素冗余两类主要问题，且 Date 的 coverage 显著偏低</p><p> SumCoT 是模型规模的涌现能力：小尺寸 GPT-3 版本上要素抽取几乎无效，仅最大版本（text-davinci-002）的抽取达到人类认可水平</p>
+<h2>创新点</h2><p>据作者所述，这是首个将 chain-of-thought prompting 引入自动摘要（开放式生成任务）的工作；区别于以往直接在含噪标准数据集上评测，论文通过专家按 5W1H 协议重写参考摘要，构建与专家判断对齐的测试集，并据此解释了 GPT-3 人类偏好与自动指标不一致的成因（测试域噪声），同时提出&#x27;先要素抽取、后整合生成&#x27;的两阶段 CoT 提示流水线。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程 | 3.5 评测与可靠使用</p><p><b>理由：</b>直接命中两个能力域。3.2 提示工程：SumCoT 是典型的思维链提示设计，其&#x27;人工设定引导问题→结构化抽取→整合生成&#x27;的两阶段提示模式是团队可直接复用的提示技术与模式资产，论文并实证了此类多步提示对生成任务信息覆盖与忠实度的收益；3.5 评测与可靠使用：论文系统揭示了参考答案噪声导致自动指标与人类偏好错位的问题，并给出专家对齐测试集+多维度人工评估协议的构建方法，对团队建立 LLM 应用（摘要、问答、生成类工具）产出质量评测体系有直接参考价值。此外，&#x27;CoT 收益随模型规模涌现、小模型上几乎无效&#x27;的结论对团队模型选型与成本权衡是重要警示。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

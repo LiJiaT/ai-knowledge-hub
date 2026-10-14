@@ -1,0 +1,369 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Let&#x27;s Sample Step by Step：基于 Adaptive-Consistency 的 LLM 高效推理与代码生成</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Let&#x27;s Sample Step by Step: Adaptive-Consistency for Efficient Reasoning and Coding with LLMs</h1>
+<p class="lead">Let&#x27;s Sample Step by Step：基于 Adaptive-Consistency 的 LLM 高效推理与代码生成</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">思维链与推理</span><span class="chip">成本与效率</span><span class="chip">可靠性与安全</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a416.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>Self-Consistency 通过对同一问题多次采样并做多数投票来提升 LLM 输出正确性，但对每个问题都固定采样 k 次，在多数答案早已明确时仍继续采样，造成大量浪费。论文提出 Adaptive-Consistency：逐个采样，每步用基于 Dirichlet 分布（实用上简化为 Beta 分布）的轻量停止准则估计当前多数答案保持多数的概率，超过阈值 0.95 即停止并输出多数答案，从而按题目难度非均匀分配采样预算；对代码生成任务则按测试用例分别计算置信度，以几何平均超过阈值作为停止条件。在 17 个推理与代码生成数据集、3 个 LLM 上，采样量平均减少约 2-4 倍（最高 7.9 倍），准确率平均下降不足 0.1%；在同等平均采样成本下甚至比 Self-Consistency 更准（GSM-8K 上约高 3%）。</p>
+<h2>问题</h2><p>现有 Self-Consistency 等多数投票方法对每个问题固定生成相同数量（如 40 个）样本，随着 LLM 规模增大，采样时间与计算成本越来越高（如竞赛级代码生成可能需要多达百万个程序样本）。论文要解决的问题是：能否根据已生成样本之间的一致性，动态决定每个问题的采样数量，在保持准确率的同时大幅降低采样开销。</p>
+<h2>方法</h2><p>提出 Adaptive-Consistency，一种推理时、模型无关的动态多数投票方法：逐个从 LLM 采样，每采一个样本后用轻量停止准则决定是继续采样还是停止并报告当前多数答案。停止准则将已观测的唯一答案计数 v 建模为 Dirichlet 分布，计算当前多数元素在重复采样后仍保持多数的概率；由于高维积分代价高，实用版本用只比较前两名计数的 Beta 分布（非信息先验 Beta(1,1)）近似，阈值 C_thresh=0.95。代码生成任务中，将各测试用例视为独立实体分别计算置信度 P，以所有测试用例几何平均超过阈值（如 0.95）作为停止条件。停止准则可灵活替换，论文还比较了 RANDOM、MAJORITY、ENTROPY、DIRICHLET、CRP 等变体。</p>
+<h2>关键结果</h2><p> 在 17 个推理与代码生成数据集、3 个 LLM 上，采样预算最多减少 7.9 倍，平均准确率下降小于 0.1%</p><p> 整体（Table 5）：采样预算平均减少 3.2 倍，平均准确率仅下降 0.07%</p><p> 分模型：CODE-DAVINCI-002 减少 3.4 倍采样且无平均准确率损失；VICUNA-13B 减少 1.9 倍且几乎无损失；GPT-3.5-TURBO 减少 4.4 倍且准确率下降小于 0.2%</p><p> 分任务类别：数学推理减少 3.3 倍采样（准确率降 0.1%）、常识推理减少 2.9 倍（降 0.2%）、符号推理减少 3.8 倍（准确率保持）、代码生成减少 2.4 倍且准确率提升 0.4%</p><p> 同等平均采样成本下，Adaptive-Consistency 在所有成本点上准确率均优于 Self-Consistency，如平均采样成本为 10 时在 GSM-8K 上约高 3%</p><p> BETA 停止准则比 DIRICHLET 和 CRP 快约 4 个数量级，且即使后者在单核 CPU 上运行，耗时相对 LLM 推理也可忽略</p><p> 典型场景：SVAMP 上平均每输入少于 5 个样本即可达到与 Self-Consistency 相当的准确率；BOOLEAN EXPRESSIONS 上预算减少 7.9 倍且无准确率损失</p><p> 统计显著性：3 种子 t 检验显示采样次数差异显著（p 值平均 1.5e-3），准确率差异统计上不显著（p 值平均 0.50）</p>
+<h2>创新点</h2><p>区别于固定预算的 Self-Consistency，按样本间一致性非均匀分配采样预算（难题多采、易题少采）；区别于需要额外验证器或多个模型的自适应推理方法，仅用轻量统计停止准则，无需训练、无需架构改动、无需额外模型；方法思想借鉴众包中的自适应聚合（何时追加标注、何时停止），但针对 LLM 推理效率重新设计；代码生成场景提出按测试用例独立聚合的方案，避免 AlphaCode 式跨测试用例拼接向量导致的输出方差高估。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.5 评测与可靠使用</p><p><b>理由：</b>论文直接命中 3.5 域中的&#x27;成本与效率优化&#x27;与产出可靠性保障：它研究的是应用层如何以更少采样次数获得同等正确率，属于&#x27;把模型用好&#x27;而非训练模型，与团队定位完全一致。团队在代码生成与审查、测试辅助、评测保障等流程中若使用 Self-Consistency/多数投票类技术提升输出可靠性，该方法可将采样成本降低 2-8 倍且几乎不损失准确率，是可直接落地的工程优化。与 3.1（上下文/记忆）、3.2（提示设计）、3.3（Agent 架构与工具）、3.4（多智能体协作）无实质关联——论文不涉及上下文组织、提示词创新、Agent loop 或多 Agent 协作。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>arXiv:2305.11860v2  [cs.CL]  2023年11月16日</p>
+<h2>Let&#x27;s Sample Step by Step: Adaptive-Consistency for Efficient Reasoning and Coding with LLMs</h2>
+<p>Pranjal Aggarwal 1 Aman Madaan 3 Yiming Yang 3 Mausam 1,2</p>
+<p>1 印度理工学院德里分校计算机科学系 2 印度理工学院德里分校Yardi人工智能学院 3 卡内基梅隆大学语言技术研究所</p>
+<p>pranjal2041@gmail.com, amadaan@cs.cmu.edu, yiming@cs.cmu.edu, mausam@cse.iitd.ac.in</p>
+<h2>Abstract</h2>
+<p>提高大语言模型（LLM）输出正确性的一种流行方法是 Self-Consistency（自一致性）——对 LLM 进行多次轮询采样，并输出出现频率最高的解。现有的 Self-Consistency 技术总是为每个问题生成固定数量的样本，而更好的做法是根据目前已生成样本之间的一致程度，非均匀地分配可用预算。为此，我们提出了 Adaptive-Consistency，这是一种成本高效、与模型无关的技术，它利用一个轻量级的停止准则动态调整每个问题的样本数量。我们在 17 个推理与代码生成数据集和三个 LLM 上的实验表明，Adaptive-Consistency 可将样本预算最多减少 7.9 倍，而平均准确率下降不到 0.1%。1</p>
+<h2>1 Introduction</h2>
+<p>大语言模型（LLMs）在文本生成与推理（Wei et al., 2022; Kojima et al., 2022; Wang et al., 2022a; Mishra et al., 2022）、数学推理（Lewkowycz et al., 2022; Gao et al., 2022; Arora et al., 2023）以及代码生成（Li et al., 2022; Madaan et al., 2023b）等各类任务中的应用日益广泛，这凸显了提升其输出正确性的重要性。实现这一目标的一种流行方法是 Self-Consistency（Wang et al., 2022b），这是一种多数投票技术：针对给定输入生成多个输出样本，并依据样本中出现频率最高的输出做出最终决策。</p>
+<p>当前的 Self-Consistency 方法通常采用固定预算的方式，即生成预定数量（例如 40 个）的样本来做出决策。然而，随着 LLM 的规模和复杂度不断增长，与多数投票相关的采样时间和计算成本正变得愈发具有挑战性。这一挑战在竞赛级代码生成（Li et al., 2022）等高风险应用中尤为明显，在这类应用中，生成大量程序（有时多达一百万个）对于最大化性能至关重要。</p>
+<p>1 代码与 LLM 输出可在 https://sample-step-by-step.info/ 获取。</p>
+<p>为应对这一挑战，我们提出了 Adaptive-Consistency，这是一种成本高效、与模型无关的多数投票技术。Adaptive-Consistency 采用一种轻量级的停止准则，为每个输入动态调整样本数量（n），而不是使用固定预算（k）。其直觉在于：如果在采样少于 k 个答案（n &lt; k）之后就已经以高置信度确立了明确的多数，那么就无需生成更多样本。</p>
+<p>Adaptive-Consistency 利用狄利克雷分布（Dirichlet distribution）对不同样本的概率分布进行建模，使我们能够量化多数元素领先于其他元素的置信度。例如，若多数元素在前 10 个样本中出现了 9 次，那么即使采样到 40 个样本，它仍保持为多数元素的可能性也非常高（&gt; 99%）。这使得 Adaptive-Consistency 可以在此时停止采样，从而节省 30 个样本的成本，而 Self-Consistency 则会继续采样全部 40 个答案。作为一种无需额外训练的推理时技术，Adaptive-Consistency 为所有预训练语言模型提供了一种便捷的开箱即用选项，并提供了在计算成本与性能之间进行权衡的灵活性。</p>
+<p>我们在 17 个多样化任务和三个不同规模的 LLM（VICUNA-13B、CODE-DAVINCI-002 和 GPT-3.5-TURBO）上对 Adaptive-Consistency 进行了评估。实验结果表明，Adaptive-Consistency 在成本效率方面优于 Self-Consistency，同时保持了相当的输出质量。在 CODE-DAVINCI-002 上，Adaptive-Consistency 将所需样本数量减少了 3.4 倍，而准确率平均没有下降。在 VICUNA-13B 上，它所需的采样数量减少 1.9 倍，准确率几乎没有下降。类似地，在 GPT-3.5-TURBO 上，它的采样数量减少 4.4 倍，准确率下降不到 0.2%。总而言之，我们的贡献如下：</p>
+<figure><img src="assets/a416/figures/fig_1.png" alt="Figure 1: An overview of Adaptive-Consistency : Self-Consistency samples a predetermined number of answers, whereas Adaptive-Consistency iteratively samples until a lightweight Stopping Criteria, decides to report the majority answer. The figure demonstrates an example where Adaptive-Consistency reduces sampling costs by 4x, requiring only ten samples to report the majority answer. The bottom-left graph contrasts Adaptive-Consistency with Self-Consistency across three reasoning categories, showing an average sample budget reduction of 3 . 3 × with a negligible 0 . 04% drop in accuracy." loading="lazy"></figure>
+<figcaption>Figure 1: An overview of Adaptive-Consistency : Self-Consistency samples a predetermined number of answers, whereas Adaptive-Consistency iteratively samples until a lightweight Stopping Criteria, decides to report the majority answer. The figure demonstrates an example where Adaptive-Consistency reduces sampling costs by 4x, requiring only ten samples to report the majority answer. The bottom-left graph contrasts Adaptive-Consistency with Self-Consistency across three reasoning categories, showing an average sample budget reduction of 3 . 3 × with a negligible 0 . 04% drop in accuracy.</figcaption>
+<h2>2 Background</h2>
+<p>上下文少样本提示（In-Context Few-Shot Prompting）　上下文少样本提示是大语言模型（LLMs）采用的一种技术，用于从给定任务输入中提供的有限数量示例中学习并进行泛化。通过在少量示例上对模型进行条件化，模型无需微调或额外训练即可快速适应新任务。具体而言，提示 p 通过拼接多个输入-答案示例对 &lt; x i , a i &gt; 构造而成；随后将该提示前置到测试输入 x test 之前，模型生成相应的答案 a test 。</p>
+<p>def adaptive_consistency(max_gens, stop_criterion): ↪ → observations = [] for k in range(1, max_gens): observations.append(sample_from_llm()) if stop_criterion(observations): break return majority(observations) def stop_criterion(observations, threshold): # 实现你的轻量级停止准则 ↪ → def self_consistency(max_gens): observations = [] for k in range(1, max_gens): observations.append(sample_from_llm()) return majority(observations)</p>
+<p>Self-Consistency　Wang et al. (2022b) 提出了 Self-Consistency，该方法通过采样多条多样化的推理链，并使用简单的多数投票机制聚合其输出，从而提升了性能。然而，更高的准确率伴随着计算成本的增加，因为对于同一个问题，必须对 LLM 进行多次提示。</p>
+<h2>3 Adaptive-Consistency</h2>
+<p>Self-Consistency 在返回多数答案之前，会从语言模型（LLM）生成预定数量（k）的答案。相比之下，Adaptive-Consistency 方法采用一种增量式的方式来从语言模型中采样输出。在生成每个样本之后，Adaptive-Consistency 会采用一个轻量级的停止准则来判断它应当：1.) 从 LLM 再生成一个额外的样本，还是 2.) 停止采样并报告当前的多数答案。这种灵活的策略使 Adaptive-Consistency 能够针对每个输入动态调整到目前为止已生成的样本数量（n）。正如我们的实验所表明的，n 通常小于 k（平均少 3.3 倍，在某些情况下最多少 7.9 倍），这使得 Adaptive-Consistency 相比 Self-Consistency 所采用的固定预算方法能够提供更高的成本效益。</p>
+<p>Adaptive-Consistency 与 Self-Consistency 的区别仅在于停止准则（Listing 1）。停止准则的设计对我们的方法至关重要，因为其目标是在最大化准确率的同时，最小化从 LLM 生成的样本平均数量。我们算法的简洁性使得各种停止准则可以互换使用，每种准则都有其各自的优缺点。接下来，我们将详细阐述一种特定的停止函数选择。</p>
+<p>Dirichlet 停止准则　设 n 为到目前为止从 LLM 生成的样本数量，其中有 m 个不重复的样本。设 v = [v_1, v_2, ..., v_m] 为各元素的计数，p_i = v_i/n 为归一化计数。例如，若 n = 10 且 m = 3（生成了 10 个样本，其中有 3 个不重复的元素），若 v = [8, 1, 1]，那么我们可以更加确信 v_1 是答案。另一方面，若 v = [4, 4, 2]，则需要生成更多样本。我们的目标是将这一直觉形式化并加以量化。</p>
+<p>按照惯例，设 p_1 = max(p_i)。我们希望评估 p_1 作为多数元素的稳定性。² 具体而言，我们想提出如下问题：如果我们再次重复生成 n 个样本的过程，p_1 成为多数元素的概率是多少？直观地说，如果该概率高于某个预先设定的阈值 C_thresh，那么我们就可以对停止采样并返回 p_1 作为多数元素这一决策更有信心：</p>
+<p>为了回答这个问题，我们与 Dirichlet 分布建立起联系。具体而言，我们注意到计数 v 参数化了一个 Dirichlet 分布，即 Dir(V)。³ 这一联系使我们能够通过从 Dir(V) 中抽取更多样本并观察 p_1 作为多数元素的稳定性，来探究采样过程的行为。为了计算 p_1 成为多数元素的概率，我们可以在概率单纯形的适当区域上对 Dirichlet 分布的联合概率密度函数进行积分。该积分可以表示如下：</p>
+<p>2 注意，我们重载了该符号，用 p 1 同时表示多数元素及其概率（其含义由上下文可以明确）。</p>
+<p>3 Dirichlet 分布是一种以计数 V 为参数、定义在多项分布之上的分布；从 Dirichlet 分布中的每次抽样得到一个多项分布 p 。详见附录 D</p>
+<p>在公式 1 中，f ( p ′ 1 , p 2 , ..., p m | V ) 表示以计数 V 为条件的 Dirichlet 分布的联合概率密度函数。p ′ 1 的积分上下限为 0 到 1。概率单纯形 S ( p ′ 1 ) 针对每个 p ′ 1 值定义，满足 p ′ 1 &gt; max m i =2 p i ，且其余 p i 值之和为 1 - p ′ 1 。这一约束确保我们所考虑的是所有能够保持 p ′ 1 多数地位的可能取值。此处我们假设，基于当前的观测集合（ V ），可能的唯一答案数量（ m ）是已知的。在分析部分（§ 5.3）中，我们进一步评估了一种中餐馆过程（Chinese Restaurant Process, CRP）停止准则，该准则放宽了这一假设，不要求预先知道可能的唯一答案数量（ m ）。</p>
+<p>Beta 停止准则　由于观测集合中唯一答案的数量可能很大，求解公式 (1) 的计算代价高昂。作为一种近似，我们观察到，确立 p 1 相对于次大概率 p 2 的多数地位，对于我们的目的而言就已足够。</p>
+<p>在这一设定下，公式 (3) 中的概率简化为参数为 ( v 1 +1 , v 2 +1) 的 Beta 分布，公式 (1) 则被公式 (2) 所取代。这一近似假设了 BETA (1 , 1) 的无信息先验，使我们能够高效地计算 p 1 为多数的置信度，从而在不引入大量计算开销的情况下做出提前停止的决策。</p>
+<p>实证结果表明，其性能与 Dirichlet 停止准则相近，但速度显著更快（见第 5.3 节）。在全部实验中，我们将这一 Beta 停止准则称为 AdaptiveConsistency。</p>
+<p>代码生成　现在，我们将注意力转向代码生成（CODE GENERATION）任务，这类任务涉及生成能够正确通过多个测试用例的程序。有关测试用例生成的更多细节见附录 A.4。</p>
+<p>代码生成任务的配置会显著影响 Self-Consistency 的度量，因为对于给定的一组测试用例，不同的程序可能产生不同的输出。这种差异可能导致简单的多数投票机制无法有效评估稳定性。为解决这一问题，我们探索了两种不同的方法来聚合多个测试用例上的答案。</p>
+<p>在第一种方法中，受 AlphaCode (Li et al., 2022) 所用方法的启发，我们将所有测试用例的输出拼接成一个包含 t 个元素的单一向量，并在整个向量上应用 Self-Consistency。这意味着，只有当两个程序在全部 t 个测试用例上的输出完全一致时，才认为这两个程序是相同的。然而，这种简单的设置可能会高估输出的方差，因为不同的程序针对这组测试用例可能会产生不同的输出。</p>
+<p>为了克服这种简单设置的局限性，我们提出了一种替代方法，将测试输入视为独立的实体，并对每个测试用例分别应用 AdaptiveConsistency：</p>
+<p>在该公式中，P 通过公式 1 计算得到。当归一化概率——即 P 在全部 t 个测试用例上的几何平均值——超过预定义阈值（例如 0.95）时，Adaptive-Consistency 方法便会终止采样过程。</p>
+<h2>4 Experiments</h2>
+<p>超参数 Adaptive-Consistency 中唯一的超参数是与停止准则（Stopping Criteria）中的参数相关的那些参数（C thresh）。我们在 Adaptive-Consistency 中使用较高的 C thresh = 0.95。通过采用较高的阈值，我们旨在保持高准确率，并防止算法过早停止。对于其他停止准则，我们在 GSM-8K 的训练集上调节参数，并在所有数据集上使用相同的阈值。所选阈值对我们方法性能的影响将在分析部分（§ 5.1）中进一步分析。</p>
+<p>基线 我们将我们的方法与 Self-Consistency 进行比较，后者是当前最先进的方法。此外，在第 5.3 节中，我们将 Adaptive-Consistency 与不同的停止准则进行对比评估，例如 RANDOM 停止和 MAJORITY（达到多数时停止）、ENTROPY、DIRICHLET 和 CRP。</p>
+<p>评估指标 我们使用两个指标来评估我们的方法与基线的性能：从大语言模型（LLM）中采样的平均生成次数，以及整体推理准确率。我们的结果表明，Adaptive-Consistency 在取得与 Self-Consistency 相似性能的同时，通常能大幅减少采样预算。</p>
+<h2>4.1 Results</h2>
+<p>表 1 展示了主要结果，并分为两部分，分别展示不同任务类别（上方子表）以及各种语言模型（下方子表）上的结果。我们重点关注效率与准确率之间可能存在的权衡。</p>
+<p>不同任务类别上的结果 我们的实验结果表明，Adaptive-Consistency 在不同任务类别上均取得了显著的效率提升——在数学任务中采样次数减少 3.3 倍，准确率下降 0.1%；在常识任务中采样次数减少 2.9 倍，准确率下降 0.2%；在符号推理任务中采样次数减少 3.8 倍且准确率保持不变；在编码任务中采样次数减少 2.4 倍，同时准确率提升 0.4%。这些发现证实了 Adaptive-Consistency 在早期识别多数元素方面的有效性，凸显了其在包括推理与编码在内的各种应用中的潜力。</p>
+<div class="tablewrap"><table><thead><tr><th>Category</th><th>Accuracy.Self-Consistency</th><th>Accuracy.Adaptive-Consistency</th><th>Num. Generations.Self-Consistency</th><th>Num. Generations.Adaptive-Consistency</th><th>∆.Num. Gen.</th><th>∆.Acc.</th></tr></thead><tbody>
+<tr><td>MATH</td><td>73.2</td><td>73.1</td><td>40</td><td>13.8</td><td>3.3 ×</td><td>-0.1</td></tr>
+<tr><td>COMMONSENSE</td><td>66</td><td>65.8</td><td>40</td><td>15.8</td><td>2.9 ×</td><td>-0.2</td></tr>
+<tr><td>SYMBOLIC Reasoning</td><td>72.8</td><td>72.8</td><td>40</td><td>13.1</td><td>3.8 ×</td><td>0</td></tr>
+<tr><td>CODE GENERATION</td><td>35.2</td><td>35.6</td><td>312.5</td><td>173.6</td><td>2.4 ×</td><td>0.4</td></tr>
+</tbody></table></div>
+<p>| Category           |   Accuracy.Self-Consistency |   Accuracy.Adaptive-Consistency |   Num. Generations.Self-Consistency |   Num. Generations.Adaptive-Consistency | ∆.Num. Gen.   |   ∆.Acc. |</p>
+<div class="tablewrap"><table><thead><tr><th>Model</th><th>Accuracy.Self-Consistency</th><th>Accuracy.Adaptive-Consistency</th><th>Num. Generations.Self-Consistency</th><th>Num. Generations.Adaptive-Consistency</th><th>∆.Num. Gen.</th><th>∆.Acc.</th></tr></thead><tbody>
+<tr><td>GPT-3.5-TURBO</td><td>76.4</td><td>76.2</td><td>40</td><td>10</td><td>4.4 ×</td><td>-0.2</td></tr>
+<tr><td>VICUNA-13B</td><td>54</td><td>54.1</td><td>40</td><td>21.7</td><td>1.9 ×</td><td>0</td></tr>
+<tr><td>CODE-DAVINCI-002</td><td>69.7</td><td>69.8</td><td>104.1</td><td>49.4</td><td>3.4 ×</td><td>0</td></tr>
+</tbody></table></div>
+<p>| Model            |   Accuracy.Self-Consistency |   Accuracy.Adaptive-Consistency |   Num. Generations.Self-Consistency |   Num. Generations.Adaptive-Consistency | ∆.Num. Gen.   |   ∆.Acc. |</p>
+<figcaption>Table 1: Main results: Adaptive-Consistency achieves a significant reduction in the number of generations, with a negligible impact on accuracy. The ∆ columns display reductions in generations (Num. Gen.) and accuracy (Acc.) between Self-Consistency and Adaptive-Consistency. Detailed results are in Table 5.</figcaption>
+<p>不同语言模型上的结果 通过考察不同语言模型上的结果，我们发现 Adaptive-Consistency 与模型无关（model-agnostic），并且能够持续减少生成次数，而对准确率的影响极小甚至没有影响。Adaptive-Consistency 始终能减少所需的生成次数，其中 GPT-3.5-TURBO 减少 4.4 倍、VICUNA-13B 减少 1.9 倍、CODE-DAVINCI-002 减少 3.4 倍，凸显了其高性价比的特质以及对不同规模模型的适应性。此外，准确率上的微小差异和轻微提升展示了 Adaptive-Consistency 的实用价值，强调了其广泛的适用性与模型无关的特性。</p>
+<h2>5.1 Effect of Confidence Threshold in Adaptive-Consistency</h2>
+<p>置信阈值 C thresh 是 Adaptive-Consistency 的一个至关重要的超参数，它根据对多数元素所期望的置信水平决定何时停止采样。虽然我们在所有实验中将该阈值设定为严格的 0.95，但在本节中，我们分析了将 C thresh 从 0.5 变化到 1 所带来的影响，以理解模型准确率与成本效率之间的权衡。</p>
+<p>在图 2 中，我们给出了一种可视化，考察了置信阈值 C thresh 与 Adaptive-Consistency 在准确率和成本效率两方面性能之间的关系。x 轴表示置信阈值，取值范围从 0.5 到 1。左 y 轴显示模型的准确率，而右 y 轴显示抽取样本的平均数量。</p>
+<p>该图（针对 GSM-8K）展示了两条曲线的预期行为：蓝色曲线（准确率）逐渐上升后趋于平稳，而红色曲线（平均样本数）最初呈线性增长，随后攀升得更加陡峭。准确率的平稳表明模型已达到其可达到的最大准确率，进一步的采样不会带来太大提升。与此同时，红色曲线的攀升速率表明，模型需要更多样本才能满足日益严格的停止置信阈值，凸显了准确率与成本效率之间的权衡。更多结果请读者参见附录 C.4。</p>
+<h2>5.2 Adaptive-Consistency vs. Self-Consistency For Equal Average Sample Costs</h2>
+<p>第 4.1 节此前已经证明，Adaptive-Consistency 能够使用更少的样本取得与 Self-Consistency 相当的性能。在本节中，我们的主要目标是在各种采样预算下比较 Adaptive-Consistency 与 Self-Consistency 的性能。对于每个固定的采样预算 k，我们对比 Adaptive-Consistency 与 Self-Consistency 的表现，其中 Self-Consistency 将样本预算均匀地分配给每个问题，而 Adaptive-Consistency 则采用非均匀分配，而非在所有实例上进行一致的分配。</p>
+<p>我们使用不同的阈值来评估 Adaptive-Consistency，每个阈值都会在成本-质量曲线上产生一个不同的点（#samples, performance）。对于 Adaptive-Consistency 所生成的每个特定样本数</p>
+<figure><img src="assets/a416/figures/fig_2.png" alt="Figure 2: Impact of Confidence Threshold ( C thresh ) on Adaptive-Consistency for GSM-8K: As C thresh varies, the accuracy of Adaptive-Consistency increases gradually, eventually plateauing. Initially, the average number of generations also increases gradually but then sharply climbs, reflecting the accuracy-confidence trade-off." loading="lazy"></figure>
+<figcaption>Figure 2: Impact of Confidence Threshold ( C thresh ) on Adaptive-Consistency for GSM-8K: As C thresh varies, the accuracy of Adaptive-Consistency increases gradually, eventually plateauing. Initially, the average number of generations also increases gradually but then sharply climbs, reflecting the accuracy-confidence trade-off.</figcaption>
+<p>（#samples），我们随后运行 Self-Consistency 以获得其对应的性能。这两种方法在这些数据点上的关系如图 3 所示，该图对 Adaptive-Consistency 与 Self-Consistency 在 GSM-8K 上的性能进行了直观比较。在所有平均样本成本下，Adaptive-Consistency 的准确率均优于 Self-Consistency。例如，当平均样本成本为 10 时，Adaptive-Consistency 在 GSM-8K 上取得了约 3% 更高的准确率。在其他数据集上也得到了类似的结果；完整结果参见附录 C.1。</p>
+<p>Adaptive-Consistency 的成功可以归因于这样一个事实：它会根据实例的复杂度调整样本数量，在难以达成明确共识的地方使用更多样本，而在答案一致的地方使用更少样本。因此，在控制成本预算的条件下，Adaptive-Consistency 取得了更优的整体性能。</p>
+<h2>5.3 Evaluation of Different Stopping Functions</h2>
+<p>Adaptive-Consistency 允许根据预期目标和需求灵活选择停止准则。在此，我们评估了六种不同的函数：1) RANDOM：以概率 p 随机停止；2) MAJORITY：当最常见答案的多数占比超过某一阈值后停止；3) ENTROPY：当答案的熵低于某一阈值后停止；4) BETA：Adaptive-Consistency 中使用的主要停止准则，基于公式 (2)；5) DIRICHLET：基于公式 (1) 的停止准则；6) CHINESE RESTAURANT PROCESS（CRP）：与 DIRICHLET 不同，CRP 不对可能的唯一答案数量做任何假设。基于可用的观测结果，我们首先对浓度参数（α）进行建模，该参数表示得到一个新答案的概率，然后进行蒙特卡洛模拟以获得当前多数答案的稳定性（更多细节参见附录 C.3）。</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>BETA</th><th>ENTROPY</th><th>DIRICHLET</th><th>CRP</th></tr></thead><tbody>
+<tr><td>Time (ms)</td><td>0.03</td><td>0.03</td><td>101.3</td><td>94.6</td></tr>
+</tbody></table></div>
+<p>|           |   BETA |   ENTROPY |   DIRICHLET |   CRP |</p>
+<figcaption>Table 2: Time comparison of different stopping criterias, when evaluated on GSM-8K and DATE UNDERSTANDING datasets. All stopping criterias are significantly faster than LLM inference, with BETA being 4 orders of magnitude faster than other variants.</figcaption>
+<p>如第 4 节所述，所有这些方法的参数均经过调优。图 4 在一系列期望采样成本范围内将 BETA 与 ENTROPY 和 MAJORITY 进行了比较。在相同采样成本下，BETA 始终取得比两者更高的准确率。此外，正如预期的那样，我们发现 RANDOM 是效果最差的方法，而 MAJORITY 几乎始终表现不如 BETA 和 ENTROPY。虽然 DIRICHLET 和 CRP 的性能与 BETA 相近，但由于代价高昂的多元积分计算，两者都比 BETA 慢约四个数量级。尽管如此，即使 DIRICHLET 和 CRP 运行在单个 CPU 核心上，与大语言模型（LLM）推理相比，它们的时间和成本开销也可以忽略不计。确切的耗时数据见表 2。详细结果见附录 C.2 的表 7。</p>
+<p>总而言之，Adaptive-Consistency 在两种场景下尤为有效：(i) 当多数趋势在采样过程早期就已明显时，例如在 SVAMP 数据集上，它平均每个输入使用少于 5 个样本即可取得与 Self-Consistency 相当的准确率；(ii) 对于潜在答案集合有限的任务，例如在 BOOLEAN EXPRESSIONS 数据集上，Adaptive-Consistency 在不损失任何准确率的情况下将计算预算降低了 7.9 倍。</p>
+<h2>6 Related Work</h2>
+<p>众包与自适应一致性 Adaptive-Consistency 的灵感来源于众包（crowdsourcing）领域的技术（Lin et al., 2012; Dai et al., 2013; Weld et al., 2015; Bragg et al., 2016）。传统上，众包需要聚合多样化的人类判断，这在资源分配管理上带来了挑战——即根据回答的一致性来判断何时应查询更多贡献者、何时应停止（Doan et al., 2011; Quinn and Bederson, 2011）。早期研究集中于估计“真实”答案与工作者可靠性的概率模型（Dawid and Skene, 1979; Whitehill et al., 2009），后来又考虑了工作者专业水平、任务复杂度和答案质量等因素（Raykar et al., 2010; Welinder et al., 2010）。然而，Adaptive-Consistency 并非通过多名人类贡献者来解决这些问题，而是专门为大语言模型（LLM）量身定制，以优化计算效率和输出准确性。与我们的愿景一致，(Parameswaran et al., 2023) 最近提出了声明式提示工程（declarative prompt engineering），将 LLM 视为众包工作者，并利用多种提示策略。</p>
+<figure><img src="assets/a416/figures/fig_3.png" alt="Figure 3: Comparison of Adaptive-Consistency with Self-Consistency on various average sampling costs on 2 datasets: GSM-8K and DATE UNDERSTANDING. Adaptive-Consistency is able to consistently beat SelfConsistency, especially when the sampling cost is low." loading="lazy"></figure>
+<figcaption>Figure 3: Comparison of Adaptive-Consistency with Self-Consistency on various average sampling costs on 2 datasets: GSM-8K and DATE UNDERSTANDING. Adaptive-Consistency is able to consistently beat SelfConsistency, especially when the sampling cost is low.</figcaption>
+<figure><img src="assets/a416/figures/fig_4.png" alt="Figure 4: Comparison of BETA, ENTROPY and MAJORITY stopping criterias. BETA consistently beats ENTROPY and MAJORITY in terms of accuracy for the same sampling cost." loading="lazy"></figure>
+<figcaption>Figure 4: Comparison of BETA, ENTROPY and MAJORITY stopping criterias. BETA consistently beats ENTROPY and MAJORITY in terms of accuracy for the same sampling cost.</figcaption>
+<p>自适应计算架构 另一系列相关工作旨在基于中间表示来提前终止计算（Liu et al., 2020; Zhou et al., 2020; Schuster et al., 2021; Geng et al., 2021; Xin et al., 2020）。Schuster et al. (2022) 提出了 CLAM，一种能够自适应地执行语言生成的语言模型。Hou et al. (2020) 提出了 Dynamic Bert，它可以调整 Transformer 的深度和宽度以满足各种计算约束。Xing et al. (2020) 提出了一种内嵌提前退出（early-exit）策略的动态深度神经网络，用于提升压缩图像的质量。另一个研究方向专注于对模型权重进行剪枝或训练稀疏权重（Fan et al., 2019; Jayakumar et al., 2021），以减少训练和推理时间。与这些方法不同，我们的方法完全无需进行任何架构修改。</p>
+<p>推理时自适应计算　这类方法专注于推理时的自适应计算，而不对模型进行架构上的修改。Schwarzschild et al. (2021b,a) 研究了三种不同的泛化任务。他们观察到，增加测试迭代次数（在其设定中对应于网络深度）有助于模型更好地泛化到困难问题。Madaan and Yang (2022) 利用了为同一任务训练的两个不同网络：一个较大的变体（慢速）和一个较小的变体（快速）。从快速到慢速的切换发生在推理过程中，依据是当前步骤生成内容的复杂度。Xue et al. (2023) 训练语言模型针对每个输入自适应地从带库（tape bank）中读取 token。与这些工作不同，我们关注的是从模型中抽取多个样本的任务（而非迭代式地求解任务，后者是这些工作的重点）。此外，近期的一些工作，如 (Madaan et al., 2023a; Chen et al., 2023)，提出基于从较小模型的输出中导出的验证信号来自适应地选择不同规模的模型。然而，我们的方法的不同之处在于：既不需要使用额外的验证器，也不需要多个模型。</p>
+<p>训练与主动学习中的自适应采样　另一类工作关注训练过程中对输入实例进行基于重要性的采样 (Bengio and Senecal, 2008; Prabhu et al., 2019; Berger et al., 2017)。与前述方法相反，我们的方法聚焦于在推理阶段对每个输入实例自适应地采样多个输出，而无需获取额外的标签。我们的方法旨在通过自适应地采样预训练语言模型的输出，高效地获得可靠的预测结果，这使其既区别于训练中的自适应采样，也区别于专注于训练阶段的主动学习。</p>
+<h2>7 Conclusion and Future Work</h2>
+<p>本文提出了 Adaptive-Consistency，一种利用动态采样来提升大语言模型（LLMs）输出正确性的低成本、模型无关的技术。我们的方法建立在 Self-Consistency 方法之上，并引入了一种轻量级的停止准则，能够根据目前已抽取样本之间的一致程度进行自适应采样。Adaptive-Consistency 在 17 个数据集和三个 LLM 上均表现出有效性，涵盖推理与编码两类任务。它将所需的采样预算降低了 2 至 4 倍，同时保持了相当的准确率，平均下降幅度小于 0.1%。</p>
+<p>我们的工作为未来研究开辟了若干方向。我们可以开发其他替代性的停止准则，或者将多种准则相结合，从而得到更加高效的采样技术。此外，在我们当前的方法中，多数决策依赖于通过匹配来确定最常见的答案。然而，这并不总能捕捉到真正的多数，例如在生成式任务中，输出可能存在不影响答案整体正确性或相关性的变体。为进一步促进研究并保证可复现性，我们已在 https://sample-step-by-step.info/ 上公开了代码和 LLM 输出。</p>
+<h2>Limitations</h2>
+<p>尽管我们提出的 Adaptive-Consistency 方法取得了令人鼓舞的结果，但它仍存在若干局限性以及未来改进的空间。</p>
+<h2>A.1 Hyperparameters</h2>
+<p>AdaptiveConsistency 中唯一的超参数是与停止准则中的参数相关的那些参数（C_thresh）。我们在 Adaptive-Consistency 中使用较高的 C_thresh = 0.95。通过使用较高的阈值，我们旨在保持较高的准确率，并防止算法过早停止。对于其他停止准则，我们在 GSM-8K 的训练集上调整参数，并在所有数据集上使用相同的阈值。所选阈值对我们方法性能的影响将在分析章节（§ 5.1）中进一步分析。我们进一步在 3 个随机种子上评估所有方法，并在表 5 中报告包含标准差的结果表。由于相关成本的原因，GPT-3.5-TURBO 仅使用单个随机种子。</p>
+<h2>A.2 Benchmarks</h2>
+<p>我们在一组多样化的编码与推理基准测试（benchmark）数据集上评估我们的方法，涵盖四个不同类别的 17 个数据集：</p>
+<div class="tablewrap"><table><thead><tr><th>Dataset</th><th></th><th>N _ test</th><th></th><th>Answer Format</th></tr></thead><tbody>
+<tr><td>GSM-8K</td><td>1319</td><td>Numerical</td><td></td><td></td></tr>
+<tr><td>ASDIV</td><td>2096</td><td>Numerical</td><td></td><td></td></tr>
+<tr><td>SVAMP</td><td>1000</td><td>Numerical</td><td></td><td></td></tr>
+<tr><td>DATE UNDERSTANDING</td><td>369</td><td>String</td><td></td><td></td></tr>
+<tr><td>TRACKING SHUFFLED OBJECTS</td><td>250</td><td>MCQ</td><td></td><td></td></tr>
+<tr><td>LOGICAL DEDUCTION</td><td>250</td><td>MCQ</td><td></td><td></td></tr>
+<tr><td>STRATEGYQA</td><td>2279</td><td>Binary</td><td></td><td></td></tr>
+<tr><td>BOOLEAN EXPRESSIONS</td><td>250</td><td>Binary</td><td></td><td></td></tr>
+<tr><td>SNARKS</td><td>250</td><td>Binary</td><td></td><td></td></tr>
+<tr><td>RUIN NAMES</td><td>178</td><td>MCQ</td><td></td><td></td></tr>
+<tr><td>SALIENT TRANSLATION</td><td>250</td><td>MCQ</td><td></td><td></td></tr>
+<tr><td>DISAMBIGUATION QA</td><td>250</td><td>MCQ</td><td></td><td></td></tr>
+<tr><td>PENGUINS</td><td>146</td><td>MCQ</td><td></td><td></td></tr>
+<tr><td>HUMANEVAL</td><td>164</td><td>Python Code</td><td></td><td></td></tr>
+<tr><td>MBPP</td><td>427</td><td>Python Code</td><td></td><td></td></tr>
+<tr><td>APPS</td><td>5000</td><td>Coding</td><td></td><td></td></tr>
+<tr><td>CODECONTESTS</td><td>165</td><td>Competitive Coding</td><td></td><td></td></tr>
+</tbody></table></div>
+<p>| Dataset                   |   | N _ test | | Answer Format      |</p>
+<figcaption>Table 3: Dataset Statistics. We evaluate on 17 diverse reasoning datasets, having different difficulty, domains, answer types, sizes ( N _ test ).</figcaption>
+<p>该任务要求模型根据最少量的条件推断出一系列对象的顺序。3.) BOOLEAN EXPRESSIONS 是一个布尔表达式任务，用于评估语言模型是否已经掌握了演绎推理的规则，即与 &quot;and&quot;、&quot;or&quot;、&quot;not&quot; 等词相关的形式（零阶）逻辑。4.) DISAMBIGUATION QA 是一个消歧任务，要求模型选出代词所指代的人。5.) PENGUINS 描述了一张企鹅表格，并要求模型回答有关企鹅属性的问题。</p>
+<h2>A.3 Tools and Framework</h2>
+<p>在查询 GPT-3.5-TURBO 和 CODEDAVINCI-002 模型（Chen et al., 2021）时，我们使用 OpenAI 提供的 api 库 6。我们使用官方提供的代码来运行 VICUNA-13B 模型（Chiang et al., 2023）。我们在单块 A100 GPU 上对 VICUNA-13B 模型进行推理。对于编码任务，我们使用 CodeT（Chen et al., 2022）提供的输出，其中模型以零样本（zero-shot）方式提示，temperature=0.8，top_p =</p>
+<p>6 API 可在以下网址获取：https://platform.openai.com/</p>
+<p>0.95。Adaptive-Consistency 中的停止准则运行速度很快，我们使用的是单核机器。对于数值积分，我们使用 Python 中的 Scipy 库。</p>
+<h2>A.4 Test-Case Generation</h2>
+<p>对于代码生成（CODE GENERATION）任务，我们采用与 CodeT（Chen et al., 2022）类似的方式生成测试用例。具体而言，我们向模型提供函数描述作为提示，并提示其生成 assert 语句。然而，与 CodeT 不同的是，我们将测试用例数量限制为仅 10 个，这些测试用例通过 1-2 次对 LLM 的提示即可生成，因此对代码生成本身的影响微乎其微。</p>
+<p>数据集统计信息见表 3。</p>
+<h2>B Results</h2>
+<p>我们在表 5 中给出了包含标准差的完整结果。对于代码生成（CODE GENERATION）任务，结果呈现在表 4 中。</p>
+<p>此外，在表 6 中我们表明 Adaptive-Consistency 带来的改进在所有数据集上均具有统计显著性。我们在 3 个随机种子上进行了双样本 t 检验（2 sample t-test）。生成数量的 p 值远小于 0.05（平均值：1.5e-3），表明我们的方法显著更加高效；而准确率的 p 值远大于 0.05（平均值：0.50），表明基线与我们的方法之间的微小准确率差异在统计上不显著。</p>
+<h2>C.1 Adaptive-Consistency vs. Self-Consistency For Equal Average Sample Costs</h2>
+<p>在 5.2 节中，我们证明了当 Adaptive-Consistency 与 Self-Consistency 在相同的期望样本成本下运行时，Adaptive-Consistency 能取得比 Self-Consistency 更高的准确率。我们在图 5 中展示了完整结果。</p>
+<p>4.1 节此前已证明，Adaptive-Consistency 能以更少的样本取得与 Self-Consistency 相当的性能。在本节中，我们考虑 Adaptive-Consistency 与 Self-Consistency 在相同平均样本数下运行的场景。对于 Self-Consistency 的每个固定采样预算 k，我们对比 Adaptive-Consistency 与 Self-Consistency 的性能，其中 Adaptive-Consistency 平均使用 k 个样本，而非在所有实例上都一致地使用 k 个样本。</p>
+<p>图 3 直观对比了 Adaptive-Consistency 与 Self-Consistency 在 GSM-8K 上的性能：在所有平均样本成本下，Adaptive-Consistency 的准确率均优于 Self-Consistency。例如，当平均样本成本为 10 时，Adaptive-Consistency 在 GSM-8K 上的准确率高出约 3%。</p>
+<p>Adaptive-Consistency 的成功可归因于其自适应采样策略。通过根据实例的复杂度调整样本数量——在难以达成明确共识时使用更多样本，而在答案一致时使用更少样本——Adaptive-Consistency 即使在平均样本成本与 Self-Consistency 相同的情况下，也能获得更优的整体性能。</p>
+<h2>C.2 Stopping Criterias</h2>
+<p>本节承接第 5.3 节的主要内容。我们针对 Adaptive-Consistency 评估了不同的停止准则。我们评估了 6 种不同的函数：</p>
+<p>为了进行比较，我们在 GSM-8K 数据集的训练集上对每种情况下的 C thresh 进行了调优。结果见表 7。在所有数据集和模型上，RANDOM 和 MAJORITY 均劣于 BETA。此外，尽管 DIRICHLET 和 CRP 与 BETA 几乎相当，但它们相对而言非常缓慢。尽管从表 7 来看，ENTROPY 似乎与 BETA 不相上下，但在图 6 中，我们展示了 BETA</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>Model</th><th>Self-Consistency.Avg. Gen.</th><th>Self-Consistency.Accuracy</th><th>Adaptive-Consistency.Avg. Gen.</th><th>Adaptive-Consistency.Accuracy</th><th>∆.Gen. Reduc.</th><th>∆.Acc. Diff. ↑</th></tr></thead><tbody>
+<tr><td>HUMANEVAL</td><td>CODE-DAVINCI-002</td><td>100</td><td>61 . 4</td><td>23.6</td><td>63.4</td><td>4.3 ×</td><td>+2 . 0</td></tr>
+<tr><td></td><td>INCODER-6B</td><td>100</td><td>19 . 5</td><td>51.2</td><td>20.1</td><td>2.0 ×</td><td>+0 . 6</td></tr>
+<tr><td></td><td>CODEGEN-16B</td><td>100</td><td>34 . 1</td><td>54.7</td><td>36.0</td><td>1.8 ×</td><td>+1 . 9</td></tr>
+<tr><td>MBPP</td><td>CODE-DAVINCI-002</td><td>100</td><td>64.4</td><td>36.3</td><td>63 . 9</td><td>2.8 ×</td><td>- 0 . 5</td></tr>
+<tr><td></td><td>INCODER-6B</td><td>100</td><td>30 . 7</td><td>53.8</td><td>30.9</td><td>1.9 ×</td><td>+0 . 2</td></tr>
+<tr><td></td><td>CODEGEN-16B</td><td>100</td><td>49 . 6</td><td>57.8</td><td>50.4</td><td>1.7 ×</td><td>+0 . 8</td></tr>
+<tr><td>APPS</td><td>CODE-DAVINCI-002</td><td>50</td><td>11.9</td><td>44.4</td><td>11.9</td><td>1.1 ×</td><td>0 . 0</td></tr>
+<tr><td>CODECONTESTS</td><td>CODE-DAVINCI-002</td><td>1000</td><td>3.0</td><td>590.2</td><td>3.0</td><td>1.6 ×</td><td>0 . 0</td></tr>
+</tbody></table></div>
+<p>|              | Model            |   Self-Consistency.Avg. Gen. | Self-Consistency.Accuracy   |   Adaptive-Consistency.Avg. Gen. | Adaptive-Consistency.Accuracy   | ∆.Gen. Reduc.   | ∆.Acc. Diff. ↑   |</p>
+<figcaption>Table 4: Comparison of Adaptive-Consistency with Self-Consistency on 4 diverse code generation datasets. The table presents the accuracy of Self-Consistency, the average number of generations (Avg. Gen.) for AdaptiveConsistency, and the accuracy of Adaptive-Consistency. Self-Consistency always draws a fixed number of samples. The ∆ columns display the reduction in generations (Gen. Reduc.) and the difference in accuracy (Acc. Diff.) between Self-Consistency and Adaptive-Consistency. For CODECONTESTS, Self-Consistency uses 1000, APPS use 50, while HUMANEVAL and MBPP use 100 generations each.</figcaption>
+<p>在相同的期望采样成本下优于 ENTROPY。</p>
+<p>最后，BETA 还具有其他关键优势：BETA 融入了不确定性的度量，这使其对数据顺序的变化更加鲁棒，能够减轻噪声的影响，并为多数结果提供量化的置信度度量。考虑一个极端情况：前两个生成的解答完全相同。多数投票策略会立即停止该过程，从而可能错过更好的解答。相比之下，BETA 会继续采样，因为尚未达到停止所需的置信度。</p>
+<h2>C.3 Chinese Restaurant Process</h2>
+<h2>C.4 Effect of Confidence Threshold on Adaptive-Consistency</h2>
+<p>我们沿用第 5.1 节中的讨论，并给出 CODE-DAVINCI002 在所有数据集上的完整结果。</p>
+<h2>D Derivation of DIRICHLET stopping criteria</h2>
+<p>考虑对于给定输入 ( I )，模型可以生成 m 个不同答案 A := { a 1 , a 2 , . . . a m } 中的一个。将在给定输入的条件下生成某个答案的概率定义为 p i := P ( a i | I ) 。现在，考虑一个观测集 ( O )，其中每个 a i 的计数为 v i ，满足 ∑ m i =1 v i = n 。不失一般性，设 p 1 &gt; max m i =2 p i 。现在，根据公式 (3)，我们需要求出概率：</p>
+<p>.</p>
+<p>然而，这里的各个 p i 均为潜在变量，我们所能获得的只有 O 。接下来我们做出如下</p>
+<p>假设 1：向量 p ⃗ = { p 1 , p 2 . . . p m } 从 ( m - 1) -单纯形上的均匀分布中采样。</p>
+<p>因此， p 1 = 1 - ∑ m - 1 i =1 p i 。由于观测集服从以 p ⃗ 为参数的多项分布，在给定 p ⃗ 的条件下 O 的条件联合概率分布可以写为：</p>
+<p>，其中 Dir 表示以 v i + 1 为参数的 Dirichlet 分布。应用贝叶斯法则，</p>
+<p>。这里 P ( O ) 是一个归一化常数，在计算中可以省略。根据假设 1，由于 p ⃗ 从均匀分布中采样，</p>
+<p>因此，在给定 O 的条件下 p ⃗ 的条件联合概率分布可以写为：</p>
+<p>现在，我们可以在 ( m - 1) -单纯形的一个满足 p 1 &gt; max m i =2 p i 的子集上对上式进行积分。由此得到方程：</p>
+<p>其中</p>
+<p>我们注意到该积分不存在闭式解，因此我们采用数值近似来计算上述积分。</p>
+<p>. . . v m +1) 定义积分区域： S ( p ′ 1 ) 接下来，为了计算公式 (9)，我们需要精确计算每个积分的积分限，使其表示区域 S ( p ′ 1 ) 。为此，我们注意 p i 需满足以下约束：1.) p i = 0 对 ∀ 2 ≤ i ≤ m 均为有效取值；2.) 给定 { p m , p m - 1 . . . p i +1 固定且位于区域 S ( p ′ 1 ) 内，则有 p i &lt; 1 - ∑ m j = i +1 p j 2 ，否则 p i ≥ p 1 ，这是不允许的；3.) 由于 p 1 &gt; max m j = i +1 p j ，所以 p i &lt; 1 - ∑ m j = i +1 p j - max m j = i +1 p j ，否则 p ⃗ 将位于 ( m - 1) -单纯形之外，这是无效的。第一个条件使每个积分的下限为 0，而条件 2 与条件 3 中的最小值给出每个积分的上界（积分限）。</p>
+<p>BETA 停止准则 由于其中涉及 m - 1 维积分，而 m 常常大于 10，计算公式 (9) 并不高效。相反，我们观察到，确立 p 1 相对于次大概率 p 2 的多数地位，对于我们的目的而言已经足够。此时，概率密度函数（pdf）简化为参数为 v 1 +1 , v 2 +1 的 BETA 分布，公式 (9) 简化为：</p>
+<p>我们使用 Python 中的 Scipy 库对上式进行数值计算。</p>
+<div class="tablewrap"><table><thead><tr><th></th><th></th><th>Self-Consistency.</th><th>Self-Consistency.Accuracy</th><th>Adaptive-Consistency.Avg. Gen.</th><th>Adaptive-Consistency.Accuracy</th><th>∆.Gen. Reduc.</th><th>∆.Acc. Diff. ↑</th></tr></thead><tbody>
+<tr><td>GSM-8K</td><td>VICUNA-13B</td><td></td><td>31.6 ( ± 3 . 0)</td><td>26.8 ( ± 2 . 2)</td><td>31 . 5 ( ± 3 . 0)</td><td>1.4 ×</td><td>- 0 . 1</td></tr>
+<tr><td></td><td>CODE-DAVINCI-002</td><td></td><td>81.1 ( ± 0 . 3)</td><td>13.8 ( ± 0 . 0)</td><td>81 . 0 ( ± 0 . 3)</td><td>2.9 ×</td><td>- 0 . 1</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>82.7</td><td>9.2</td><td>82.7</td><td>4.3 ×</td><td>0 . 0</td></tr>
+<tr><td></td><td>VICUNA-13B</td><td></td><td>63.0 ( ± 0 . 3)</td><td>18.8 ( ± 0 . 1)</td><td>62 . 8 ( ± 0 . 4)</td><td>2.1 ×</td><td>- 0 . 2</td></tr>
+<tr><td>SVAMP</td><td>CODE-DAVINCI-002</td><td></td><td>85.1 ( ± 0 . 3)</td><td>9.5 ( ± 0 . 1)</td><td>85 . 0 ( ± 0 . 3)</td><td>4.2 ×</td><td>- 0 . 1</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>85.1</td><td>9.5</td><td>85 . 0</td><td>4.2 ×</td><td>- 0 . 1</td></tr>
+<tr><td></td><td>VICUNA-13B</td><td></td><td>64.0 ( ± 0 . 3)</td><td>16.5 ( ± 0 . 2)</td><td>64.0 ( ± 0 . 3)</td><td>2.4 ×</td><td>0 . 0</td></tr>
+<tr><td>ASDIV</td><td>CODE-DAVINCI-002</td><td></td><td>83.2 ( ± 0 . 2)</td><td>10.0 ( ± 0 . 0)</td><td>83 . 2 ( ± 0 . 2)</td><td>4.0 ×</td><td>0 . 0</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>83.0</td><td>10.0</td><td>83.0</td><td>4.0 ×</td><td>0 . 0</td></tr>
+<tr><td></td><td>VICUNA-13B</td><td></td><td>59 . 8 ( ± 0 . 3)</td><td>17.3 ( ± 0 . 3)</td><td>60.2 ( ± 0 . 4)</td><td>2.3 ×</td><td>+0 . 4</td></tr>
+<tr><td>DATE UNDERSTANDING</td><td>CODE-DAVINCI-002</td><td></td><td>80.3 ( ± 0 . 1)</td><td>10.7 ( ± 0 . 3)</td><td>79 . 5 ( ± 0 . 3)</td><td>3.7 ×</td><td>- 0 . 8</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>77.5</td><td>9.1</td><td>77 . 0</td><td>4.4 ×</td><td>- 0 . 5</td></tr>
+<tr><td></td><td>VICUNA-13B</td><td></td><td>31 . . 0)</td><td>20.3 ( ± 0 . 0)</td><td>32.0 ( ± 1 . 2)</td><td>2.0 ×</td><td>+0 . 2</td></tr>
+<tr><td>TRACKING SHUFFLED OBJECTS</td><td></td><td></td><td>8 ( ± 1 77.2</td><td>1)</td><td>6)</td><td></td><td></td></tr>
+<tr><td></td><td>CODE-DAVINCI-002</td><td></td><td>( ± 1 . 3)</td><td>9.7 ( ± 0 .</td><td>77 . 1 ( ± 1 .</td><td>4.1 ×</td><td>- 0 . 1</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>85 . 2</td><td>6.2</td><td>85.6</td><td>6.4 ×</td><td>+0 . 4</td></tr>
+<tr><td></td><td>VICUNA-13B</td><td></td><td>51 . 2 ( ± 0 . 8)</td><td>18.1 ( ± 0 . 2)</td><td>51.4 ( ± 0 . 6)</td><td>2.2 ×</td><td>+0 . 2</td></tr>
+<tr><td>LOGICAL DEDUCTION</td><td>CODE-DAVINCI-002</td><td></td><td>89.4 ( ± 0 . 2)</td><td>8.5 ( ± 0 . 1) 7.5</td><td>89.4 ( ± 0 . 2)</td><td>4.7 × 5.3 ×</td><td>0 . 0 0 . 0</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>86.8</td><td>16.3 ( ± 0 .</td><td>86.8</td><td></td><td>0 . 0</td></tr>
+<tr><td></td><td>VICUNA-13B</td><td></td><td>65 . 8 ( ± 0 . 5)</td><td>1)</td><td>65.8 ( ± 0 . 4)</td><td>2.5 ×</td><td></td></tr>
+<tr><td>STRATEGYQA</td><td>CODE-DAVINCI-002</td><td></td><td>79.0 ( ± 0 . 2)</td><td>11.9 ( ± 0 . 2)</td><td>78 . 8 ( ± 0 . 1)</td><td>3.4 ×</td><td>- 0 . 2</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>68.1</td><td>11.8</td><td>67 . 9</td><td>3.4 ×</td><td>- 0 . 2</td></tr>
+<tr><td></td><td>VICUNA-13B</td><td></td><td>79.2 ( ± 0 . 6)</td><td>16.2 ( ± 0 . 3) 1)</td><td>78 . 4 ( ± 0 . 3)</td><td>2.5 ×</td><td>- 0 . 8</td></tr>
+<tr><td>BOOLEAN EXPRESSIONS</td><td>CODE-DAVINCI-002</td><td></td><td>94.5 ( ± 0 . 4)</td><td>6.6 ( ± 0 .</td><td>94.5 ( ± 0 . 4)</td><td>6.0 ×</td><td>0 . 0</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>93.2 ± 1 . 0)</td><td>5.0 23.2 ( ± 0 .</td><td>92 . 8 73.6 ( ± 0 .</td><td>7.9 ×</td><td>- 0 . 4</td></tr>
+<tr><td>SNARKS</td><td>VICUNA-13B CODE-DAVINCI-002</td><td></td><td>73 . 2 ( 74.0 ( ± 1 . 0)</td><td>7) 12.7 ( ± 0 . 4)</td><td>8) 74.0 ( ± 1 . 5)</td><td>1.7 × 3.1 ×</td><td>+0 . 4 0 . 0</td></tr>
+<tr><td>RUIN NAMES</td><td>GPT-3.5-TURBO</td><td></td><td>65.7</td><td>8.8</td><td>65 . 2</td><td>4.5 ×</td><td>- 0 . 6</td></tr>
+<tr><td></td><td>CODE-DAVINCI-002</td><td></td><td>. 9)</td><td>( ± 0 13.1</td><td>78.0 ( ± 0 .</td><td>2.3</td><td>0 . 0</td></tr>
+<tr><td></td><td>VICUNA-13B</td><td></td><td>43.6 ( ± 2 . 1) 78.0 ( ± 0</td><td>33.8 ( ± 0 . 6) 17.2 . 1)</td><td>43.6 ( ± 2 . 1)</td><td>1.2 ×</td><td>0 . 0</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td></td><td></td><td>6) 74 . 0</td><td>× 3.1 ×</td><td>- 0 . 8</td></tr>
+<tr><td></td><td></td><td></td><td>74.8</td><td>28.7 ( ± 2 .</td><td>64.3 ( ± 0 .</td><td>1.2 ×</td><td>- 0 . 3</td></tr>
+<tr><td>SALIENT TRANSLATION</td><td>VICUNA-13B CODE-DAVINCI-002</td><td></td><td>28.9 ( ± 2 . 4) 64.3 ( ± 0 . 2)</td><td>5) 11.8 ( ± 0 .</td><td>28 . 7 ( ± 2 . 5)</td><td>3.4 ×</td><td>0 . 0</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td></td><td>5)</td><td>2)</td><td></td><td></td></tr>
+<tr><td></td><td></td><td></td><td>56.8</td><td>11.1</td><td>56.8 63 . 5 ( ± 1 . 1)</td><td>3.6 ×</td><td>0 . 0 - 0 . 3</td></tr>
+<tr><td>DISAMBIGUATION QA</td><td>VICUNA-13B CODE-DAVINCI-002</td><td></td><td>63.7 ( ± 0 . 7) 74 . 9 ( ± 0 . 8)</td><td>22.8 ( ± 1 . 0) 13.5 ( ± 0 . 6)</td><td>75.1 ( ± 0 . 7)</td><td>1.8 × 3.0 ×</td><td>+0 . 1</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>62.5</td><td>13.9</td><td>62.5</td><td>2.9 ×</td><td>0 . 0</td></tr>
+<tr><td></td><td>VICUNA-13B</td><td></td><td>. 8 ( ± 1 . 8)</td><td>22.9 ( ± 0 . 7)</td><td>47.3 ( ± 1 . 9)</td><td>1.7 ×</td><td>+0 . 5</td></tr>
+<tr><td>PENGUINS</td><td>CODE-DAVINCI-002</td><td></td><td>46 83 . 8 ( ± 0 . 9)</td><td>11.0 ( ± 0 . 4)</td><td>84.0 ( ± 0 . 6)</td><td>3.6 ×</td><td>+0 . 2</td></tr>
+<tr><td></td><td>GPT-3.5-TURBO</td><td></td><td>71.9</td><td>14.2</td><td>71.9</td><td>2.8 ×</td><td>0 . 0</td></tr>
+<tr><td>Average</td><td></td><td></td><td></td><td></td><td>70.2 ( ± 0 .</td><td>3 . 2</td><td></td></tr>
+<tr><td></td><td></td><td></td><td>70.3 ( ± 0 . 8)</td><td>14.1 ( ± 0 .</td><td></td><td>×</td><td></td></tr>
+<tr><td></td><td></td><td></td><td></td><td>5)</td><td>8)</td><td></td><td>-0.07</td></tr>
+</tbody></table></div>
+<p>|                           |                             | Self-Consistency.   | Self-Consistency.Accuracy         | Adaptive-Consistency.Avg. Gen.   | Adaptive-Consistency.Accuracy   | ∆.Gen. Reduc.   | ∆.Acc. Diff. ↑   |</p>
+<figcaption>Table 5: Comparison of Adaptive-Consistency with Self-Consistency on 17 diverse coding &amp; reasoning datasets. Self-Consistency always draws 40 samples. The table shows accuracy, average generations (Avg. Gen.). The ∆ columns display reductions in generations (Gen. Reduc.) and accuracy (Acc. Diff.) between Self-Consistency and Adaptive-Consistency. Adaptive-Consistency achieves a 3 . 2 × reduction in sample budget ( Gen. Reduc. ) with minimal average accuracy drop of 0.07% ( Acc. Diff. ).</figcaption>
+<div class="tablewrap"><table><thead><tr><th>Dataset</th><th>Model</th><th>P-Value (Accuracy)</th><th>P-Value (Num Gens)</th></tr></thead><tbody>
+<tr><td>GSM-8K</td><td>VICUNA-13B</td><td>0.5</td><td>0.0056</td></tr>
+<tr><td>GSM-8K</td><td>CODE-DAVINCI-002</td><td>0.42</td><td>2.09e-06</td></tr>
+<tr><td>SVAMP</td><td>VICUNA-13B</td><td>0.07</td><td>3.47e-06</td></tr>
+<tr><td>SVAMP</td><td>CODE-DAVINCI-002</td><td>0.42</td><td>7.4e-06</td></tr>
+<tr><td>ASDIV</td><td>VICUNA-13B</td><td>1</td><td>0.0005</td></tr>
+<tr><td>ASDIV</td><td>CODE-DAVINCI-002</td><td>1</td><td>0.0023</td></tr>
+<tr><td>DATE UNDERSTANDING</td><td>VICUNA-13B</td><td>0.057</td><td>7.68e-05</td></tr>
+<tr><td>DATE UNDERSTANDING</td><td>CODE-DAVINCI-002</td><td>0.04</td><td>4.63e-05</td></tr>
+<tr><td>TRACKING SHUFFLED OBJECTS</td><td>VICUNA-13B</td><td>0.5</td><td>2e-05</td></tr>
+<tr><td>TRACKING SHUFFLED OBJECTS</td><td>CODE-DAVINCI-002</td><td>0.67</td><td>9.88e-06</td></tr>
+<tr><td>LOGICAL DEDUCTION</td><td>VICUNA-13B</td><td>0.5</td><td>0.0007</td></tr>
+<tr><td>LOGICAL DEDUCTION</td><td>CODE-DAVINCI-002</td><td>-</td><td>0.0016</td></tr>
+<tr><td>STRATEGYQA</td><td>VICUNA-13B</td><td>0.90</td><td>1.16e-05</td></tr>
+<tr><td>STRATEGYQA</td><td>CODE-DAVINCI-002</td><td>0.24</td><td>0.0005</td></tr>
+<tr><td>BOOLEAN EXPRESSIONS</td><td>VICUNA-13B</td><td>0.32</td><td>8.52e-05</td></tr>
+<tr><td>BOOLEAN EXPRESSIONS</td><td>CODE-DAVINCI-002</td><td>-</td><td>4.98e-06</td></tr>
+<tr><td>SNARKS</td><td>VICUNA-13B</td><td>0.18</td><td>0.0007</td></tr>
+<tr><td>SNARKS</td><td>CODE-DAVINCI-002</td><td>1</td><td>0.0001</td></tr>
+<tr><td>RUIN NAMES</td><td>VICUNA-13B</td><td>-</td><td>0.0049</td></tr>
+<tr><td>RUIN NAMES</td><td>CODE-DAVINCI-002</td><td>1</td><td>8.72e-06</td></tr>
+<tr><td>SALIENT TRANSLATION</td><td>VICUNA-13B</td><td>0.18</td><td>0.0211</td></tr>
+<tr><td>SALIENT TRANSLATION</td><td>CODE-DAVINCI-002</td><td>1</td><td>0.0001</td></tr>
+<tr><td>DISAMBIGUATION QA</td><td>VICUNA-13B</td><td>0.53</td><td>0.0015</td></tr>
+<tr><td>DISAMBIGUATION QA</td><td>CODE-DAVINCI-002</td><td>0.42</td><td>0.0002</td></tr>
+<tr><td>PENGUINS</td><td>VICUNA-13B</td><td>0.18</td><td>0.0009</td></tr>
+<tr><td>PENGUINS</td><td>CODE-DAVINCI-002</td><td>0.42</td><td>7.79e-05</td></tr>
+<tr><td>Average</td><td></td><td>0.503</td><td>0.0002</td></tr>
+</tbody></table></div>
+<p>| Dataset                   | Model            | P-Value (Accuracy)   |   P-Value (Num Gens) |</p>
+<figcaption>Table 6: P-values using 2 sample t-test over 3 seeds on multiple datasets and models. The p-value for &#x27;number of generations&#x27; is significantly less than 0.05 (average: 1.5e-3), confirming our method&#x27;s efficiency, while the p-value for accuracy is much larger than 0.05 (average: 0.50), indicating that the slight accuracy difference is statistically insignificant.</figcaption>
+<figure><img src="assets/a416/figures/fig_5.png" alt="Figure 5: Comparison of Adaptive-Consistency with Self-Consistency on various average sampling costs. AdaptiveConsistency is able to consistently beat Self-Consistency, especially when the sampling cost is low. Moreover, C thresh = 0 . 95 is a good indication of saturation in accuracy indicating the value works out-of-box for most configurations considered." loading="lazy"></figure>
+<figcaption>Figure 5: Comparison of Adaptive-Consistency with Self-Consistency on various average sampling costs. AdaptiveConsistency is able to consistently beat Self-Consistency, especially when the sampling cost is low. Moreover, C thresh = 0 . 95 is a good indication of saturation in accuracy indicating the value works out-of-box for most configurations considered.</figcaption>
+<figure><img src="assets/a416/figures/fig_6.png" alt="Figure 6: Comparison of BETA, MAJORITY and ENTROPY stopping criterias. In the two representative datasets, BETA consistently beats ENTROPY and MAJORITY for the same sampling cost. This shows in practice BETA performs better than both for the desirable range of accuracy and sampling cost." loading="lazy"></figure>
+<figcaption>Figure 6: Comparison of BETA, MAJORITY and ENTROPY stopping criterias. In the two representative datasets, BETA consistently beats ENTROPY and MAJORITY for the same sampling cost. This shows in practice BETA performs better than both for the desirable range of accuracy and sampling cost.</figcaption>
+<div class="tablewrap"><table><thead><tr><th></th><th></th><th>RANDOM.Average ↓ Generations</th><th>RANDOM.Accuracy ↑</th><th>MAJORITY.Average ↓ Generations</th><th>MAJORITY.Accuracy ↑</th><th>ENTROPY.Average ↑ Generations</th><th>ENTROPY.Accuracy ↑</th><th>BETA (Adaptive-Consistency).Average ↑ Generations</th><th>BETA (Adaptive-Consistency).Accuracy ↑</th><th>DIRICHLET.Average ↑ Generations</th><th>DIRICHLET.Accuracy ↑</th><th>CRP.Average ↑ Generations</th><th>CRP.Accuracy ↑</th></tr></thead><tbody>
+<tr><td>GSM-8K</td><td>VICUNA-13B</td><td>26.0</td><td>30 . 1</td><td>28 . 7</td><td>31 . 5</td><td>26 . 3</td><td>31 . 5</td><td>26 . 8</td><td>31 . 5</td><td>28 . 2</td><td>31.7</td><td>25.6</td><td>31 . 5</td></tr>
+<tr><td>GSM-8K</td><td>CODE-DAVINCI-002</td><td>13 . 8</td><td>76 . 9</td><td>16 . 6</td><td>80 . 9</td><td>15 . 3</td><td>81 . 0</td><td>13 . 8</td><td>81 . 0</td><td>15 . 2</td><td>81.1</td><td>13.2</td><td>81.1</td></tr>
+<tr><td>ASDIV</td><td>VICUNA-13B</td><td>28 . 0</td><td>63 . 2</td><td>14.8</td><td>63 . 7</td><td>15 . 8</td><td>63 . 9</td><td>16 . 5</td><td>64.0</td><td>17 . 7</td><td>64.0</td><td>16 . 9</td><td>64.0</td></tr>
+<tr><td>ASDIV</td><td>CODE-DAVINCI-002</td><td>13 . 8</td><td>81 . 9</td><td>9.2</td><td>83 . 1</td><td>11 . 5</td><td>83.3</td><td>10 . 0</td><td>83 . 2</td><td>10 . 7</td><td>83 . 1</td><td>10 . 7</td><td>83 . 1</td></tr>
+<tr><td>SVAMP</td><td>VICUNA-13B</td><td>28 . 0</td><td>61 . 3</td><td>17.1</td><td>62 . 5</td><td>17 . 7</td><td>62 . 6</td><td>18 . 8</td><td>62 . 8</td><td>19 . 7</td><td>62.9</td><td>18 . 2</td><td>62 . 8</td></tr>
+<tr><td>SVAMP</td><td>CODE-DAVINCI-002</td><td>13 . 4</td><td>83 . 3</td><td>8.4</td><td>84 . 8</td><td>10 . 7</td><td>85 . 1</td><td>9 . 5</td><td>85 . 0</td><td>10 . 3</td><td>85.1</td><td>9 . 8</td><td>85 . 0</td></tr>
+<tr><td>DATE UNDERSTANDING</td><td>VICUNA-13B</td><td>28 . 0</td><td>58 . 3</td><td>15.3</td><td>59 . 5</td><td>16 . 0</td><td>59 . 9</td><td>17 . 3</td><td>60.2</td><td>18 . 5</td><td>59 . 9</td><td>16 . 9</td><td>59 . 9</td></tr>
+<tr><td>DATE UNDERSTANDING</td><td>CODE-DAVINCI-002</td><td>13 . 2</td><td>76 . 4</td><td>9.7</td><td>78 . 7</td><td>11 . 6</td><td>79 . 9</td><td>10 . 7</td><td>79 . 5</td><td>11 . 9</td><td>80.5</td><td>10 . 7</td><td>79 . 8</td></tr>
+<tr><td>TRACKING SHUFFLED OBJECTS</td><td>VICUNA-13B</td><td>27 . 9</td><td>31 . 8</td><td>15.0</td><td>33.0</td><td>18 . 4</td><td>32 . 0</td><td>20 . 3</td><td>32 . 0</td><td>23 . 3</td><td>32 . 0</td><td>19 . 6</td><td>31 . 8</td></tr>
+<tr><td>TRACKING SHUFFLED OBJECTS</td><td>CODE-DAVINCI-002</td><td>13 . 5</td><td>76 . 3</td><td>7.0</td><td>76 . 8</td><td>11 . 5</td><td>76 . 9</td><td>9 . 7</td><td>77 . 1</td><td>11 . 5</td><td>77.2</td><td>10 . 2</td><td>77 . 1</td></tr>
+<tr><td>LOGICAL DEDUCTION</td><td>VICUNA-13B</td><td>27 . 9</td><td>50 . 5</td><td>12.9</td><td>51 . 2</td><td>15 . 8</td><td>51.4</td><td>18 . 1</td><td>51.4</td><td>20 . 9</td><td>51 . 2</td><td>18 . 3</td><td>51.4</td></tr>
+<tr><td>LOGICAL DEDUCTION</td><td>CODE-DAVINCI-002</td><td>13 . 7</td><td>88 . 3</td><td>5.9</td><td>89.6</td><td>10 . 1</td><td>89.6</td><td>8 . 5</td><td>89 . 4</td><td>10 . 2</td><td>89 . 2</td><td>9 . 3</td><td>89 . 4</td></tr>
+<tr><td>STRATEGYQA</td><td>VICUNA-13B</td><td>28 . 1</td><td>65 . 1</td><td>11.7</td><td>65 . 5</td><td>14 . 5</td><td>65 . 8</td><td>16 . 3</td><td>65 . 8</td><td>18 . 7</td><td>65.8</td><td>17 . 0</td><td>65 . 7</td></tr>
+<tr><td>STRATEGYQA</td><td>CODE-DAVINCI-002</td><td>13 . 4</td><td>76 . 6</td><td>7.2</td><td>77 . 8</td><td>14 . 9</td><td>78 . 5</td><td>11 . 9</td><td>78 . 8</td><td>14 . 5</td><td>78.9</td><td>11 . 4</td><td>78.9</td></tr>
+<tr><td>BOOLEAN EXPRESSIONS</td><td>VICUNA-13B</td><td>27 . 6</td><td>78 . 0</td><td>10.4</td><td>76 . 8</td><td>14 . 8</td><td>78 . 3</td><td>16 . 2</td><td>78 . 4</td><td>19 . 1</td><td>78.8</td><td>17 . 0</td><td>78 . 5</td></tr>
+<tr><td>BOOLEAN EXPRESSIONS</td><td>CODE-DAVINCI-002</td><td>13 . 1</td><td>93 . 4</td><td>4.3</td><td>94 . 3</td><td>8 . 2</td><td>94.5</td><td>6 . 6</td><td>94.5</td><td>8 . 2</td><td>94.5</td><td>7 . 9</td><td>94 . 4</td></tr>
+<tr><td>SNARKS</td><td>VICUNA-13B</td><td>28 . 4</td><td>70 . 3</td><td>18.1</td><td>72 . 1</td><td>20 . 3</td><td>73 . 0</td><td>23 . 2</td><td>73.6</td><td>25 . 8</td><td>73.6</td><td>22 . 9</td><td>73.6</td></tr>
+<tr><td>SNARKS</td><td>CODE-DAVINCI-002</td><td>13 . 6</td><td>71 . 6</td><td>10.5</td><td>74.0</td><td>12 . 1</td><td>74.0</td><td>12 . 7</td><td>74.0</td><td>14 . 2</td><td>73 . 4</td><td>12 . 3</td><td>73 . 2</td></tr>
+<tr><td>RUIN NAMES</td><td>VICUNA-13B</td><td>28.3</td><td>40 . 6</td><td>30 . 4</td><td>43 . 9</td><td>31 . 9</td><td>43 . 7</td><td>33 . 8</td><td>43 . 6</td><td>34 . 0</td><td>43 . 6</td><td>32 . 0</td><td>44.0</td></tr>
+<tr><td>RUIN NAMES</td><td>CODE-DAVINCI-002</td><td>13.8</td><td>71 . 7</td><td>17 . 5</td><td>77 . 7</td><td>18 . 6</td><td>78.1</td><td>17 . 2</td><td>78 . 0</td><td>17 . 6</td><td>76 . 8</td><td>16 . 4</td><td>78.1</td></tr>
+<tr><td>SALIENT TRANSLATION</td><td>VICUNA-13B</td><td>24 . 9</td><td>27 . 7</td><td>24.6</td><td>28 . 5</td><td>26 . 3</td><td>28 . 0</td><td>28 . 7</td><td>28 . 7</td><td>29 . 4</td><td>28 . 8</td><td>26 . 9</td><td>28.9</td></tr>
+<tr><td>SALIENT TRANSLATION</td><td>CODE-DAVINCI-002</td><td>14 . 0</td><td>62 . 5</td><td>9.9</td><td>64.7</td><td>13 . 1</td><td>64 . 3</td><td>11 . 8</td><td>64 . 3</td><td>13 . 7</td><td>64 . 1</td><td>11 . 7</td><td>64 . 3</td></tr>
+<tr><td>DISAMBIGUATION QA</td><td>VICUNA-13B</td><td>27 . 9</td><td>62 . 9</td><td>18.3</td><td>63 . 5</td><td>20 . 1</td><td>63 . 1</td><td>22 . 8</td><td>63 . 5</td><td>25 . 4</td><td>63.9</td><td>22 . 1</td><td>63 . 3</td></tr>
+<tr><td>DISAMBIGUATION QA</td><td>CODE-DAVINCI-002</td><td>13 . 7</td><td>72 . 1</td><td>10.4</td><td>73 . 9</td><td>15 . 9</td><td>74 . 9</td><td>13 . 5</td><td>75 . 1</td><td>16 . 3</td><td>75.2</td><td>13 . 2</td><td>75.2</td></tr>
+<tr><td>PENGUINS</td><td>VICUNA-13B</td><td>27 . 9</td><td>45 . 6</td><td>19.7</td><td>46 . 3</td><td>20 . 7</td><td>47.3</td><td>22 . 9</td><td>47.3</td><td>25 . 1</td><td>47.3</td><td>22 . 1</td><td>47.3</td></tr>
+<tr><td>PENGUINS</td><td>CODE-DAVINCI-002</td><td>13 . 3</td><td>81 . 4</td><td>9.0</td><td>83 . 3</td><td>13 . 1</td><td>83 . 8</td><td>11 . 0</td><td>84 . 0</td><td>12 . 9</td><td>84 . 0</td><td>11 . 0</td><td>84.5</td></tr>
+</tbody></table></div>
+<p>|                           |                  | RANDOM.Average ↓ Generations   | RANDOM.Accuracy ↑   | MAJORITY.Average ↓ Generations   | MAJORITY.Accuracy ↑   | ENTROPY.Average ↑ Generations   | ENTROPY.Accuracy ↑   | BETA (Adaptive-Consistency).Average ↑ Generations   | BETA (Adaptive-Consistency).Accuracy ↑   | DIRICHLET.Average ↑ Generations   | DIRICHLET.Accuracy ↑   | CRP.Average ↑ Generations   | CRP.Accuracy ↑   |</p>
+<figcaption>Table 7: Comparison of various Stopping Criterias in Adaptive-Consistency. In general, BETA outperforms RANDOM and MAJORITY by decent margins across all datasets. BETA has comparable performance to DIRICHLET, but the latter is much slower. ENTROPY performs similarly to BETA but lacks human-interpretable stopping rationale.</figcaption>
+<figure><img src="assets/a416/figures/fig_7.png" alt="Figure 7: Impact of Confidence Threshold ( C thresh ) on Adaptive-Consistency: As C thresh varies, the accuracy of Adaptive-Consistency increases gradually, eventually plateauing. Initially, the average number of generations also increases gradually but then sharply climbs, reflecting the accuracy-confidence trade-off. The trend is observed almost consistently across all datasets." loading="lazy"></figure>
+<figcaption>Figure 7: Impact of Confidence Threshold ( C thresh ) on Adaptive-Consistency: As C thresh varies, the accuracy of Adaptive-Consistency increases gradually, eventually plateauing. Initially, the average number of generations also increases gradually but then sharply climbs, reflecting the accuracy-confidence trade-off. The trend is observed almost consistently across all datasets.</figcaption></div></div></body></html>

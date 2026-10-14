@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IM-RAG：通过学习内心独白（Inner Monologues）实现多轮检索增强生成</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>IM-RAG: Multi-Round Retrieval-Augmented Generation Through Learning Inner Monologues</h1>
+<p class="lead">IM-RAG：通过学习内心独白（Inner Monologues）实现多轮检索增强生成</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">RAG与检索</span><span class="chip">Agent框架</span><span class="chip">工具调用</span><span class="chip">思维链与推理</span><span class="chip">记忆管理</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a110.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文针对 RAG 系统在适配能力各异的 IR 系统、多轮检索过程可解释性不足、缺乏端到端优化三方面的问题，提出 LLM 为核心的 IM-RAG 框架。方法上让 LLM 作为 Reasoner 在 Questioner 与 Answerer 两个角色间切换：信息不足时生成检索 query，充分时给出最终答案；引入 Refiner 对 Retriever 输出做重排与格式化以弥合 IR 模块与 LLM 的差距，并用 Progress Tracker 基于余弦相似度提供中间步奖励，通过 RL（PPO）训练 Questioner、SFT 训练 Answerer。在 HotPotQA 上取得 SOTA，F1 达 82.5%，比同结构但不做多轮检索的基线（41.2%）近乎翻倍，去掉 Refiner 会带来 14.2% 的 F1 下降。对团队而言，其&quot;何时继续检索、何时作答&quot;的切换机制与&quot;检索结果精炼后再注入上下文&quot;的做法，可直接借鉴到知识库问答与检索 Agent 的工具调用流程中。</p>
+<h2>问题</h2><p>RAG 范式虽能借助外部知识缓解 LLM 的生成幻觉与知识静态问题，但存在三点不足：难以灵活适配能力各异的 IR（信息检索）系统、多轮检索过程可解释性受限、缺乏端到端优化。已有 prompting 方法简单灵活但无法针对具体搜索引擎做端到端优化（改进 query 改写模块未必带来更好检索效果）；基于人工标注多轮检索记录的训练方法需要大量标注数据与训练成本，且对需要多步推理、多轮检索的复杂问题难以收集标注。</p>
+<h2>方法</h2><p>提出 LLM-centric 的 IM-RAG 框架，把 Inner Monologue 从 QA 对话推广为 Reasoner 与 Retriever 之间任意形式的通信，含四个组件：(1) Reasoner：同一 base LLM（Vicuna-1.5 7B）上挂 Questioner 与 Answerer 两个 LoRA adapter，前者经 RL（PPO）学习把复杂问题分解为依赖上下文的多轮子查询，后者经 SFT 专责最终作答；(2) Retriever：可插拔（实验用 Sentence-transformer + FAISS 的 DPR）；(3) Refiner：用 RankVicuna 对检索结果重排/改写/过滤，弥合 IR 模块与 LLM 在格式、长度、重要性上的差距；(4) Progress Tracker：基于与 golden 支撑文档的余弦相似度给每轮检索打分，累积分数超过阈值 φ_r=0.3 或达到最大轮数 N_max=3 时由提问切换为作答。整个 IM 过程以中间步距离分数、最终答案 F1 与 KL 惩罚为奖励做端到端优化。</p>
+<h2>关键结果</h2><p> 在 HotPotQA 上取得 SOTA，F1 达 82.5%，相对此前最佳模型有 1.9% 的相对提升；因未重点微调 IR 模块，Passage EM 等检索指标落后于第二组基线</p><p> 与同模型、同结构但不做多轮检索的 RAG (no IM) 基线相比，F1 从 41.2% 提升到 82.5%</p><p> GPT-3.5（4-shot、未接外部知识）在 EM 与 F1 上分别落后 RAG (no IM) 基线 0.2% 与 4.1%；REACT（PaLM-540B）因缺乏任务特定优化不占优势</p><p> 消融：去掉 Refiner 导致 F1 下降 14.2%（68.3% vs 82.5%）；去掉 Answerer SFT、仅用 Questioner 作答得 F1 77.9%，下降 4.6%</p><p> 去掉 Questioner 的 RL、改用 prompting 触发多轮检索时，vicuna-7b 在大量数据点上无法按期望格式输出 query，系统无法工作</p><p> McNemar 检验显示 IM-RAG 相对 no-IM、GPT-3、no-SFT、no-Refiner 的提升均统计显著</p><p> Retriever 侧 FAISS 相似检索在 GPU 环境下平均每 query 0.061 秒</p>
+<h2>创新点</h2><p>相对 IMMO 等仅支持 QA 对话式 Inner Monologue 的工作，IM-RAG 把 IM 推广到 Reasoner 与 Retriever 间任意结构化/非结构化形式（文本块列表、排序结果、标量分数）的通信，并首次在多轮 RAG 中引入 Progress Tracker 提供中间步奖励，以改善 PPO 在多步过程中的优化效率；相比 AISO、CoS 等绑定预定义 IR 系统、换域需重训的方法，通过可学习的 Refiner 适配器实现 IR 模块即插即换，且无需人工标注多轮检索记录即可用 RL 端到端优化，兼顾灵活性、可解释性与性能。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.1 上下文工程与记忆 | 3.3 Agent 架构与工具使用</p><p><b>理由：</b>直接命中 3.1（RAG/检索增强、检索结果作为上下文的组织）与 3.3（Agent loop 与工具调用）：Reasoner 自主决定&#x27;继续生成 query 调用 Retriever 还是给出最终答案&#x27;，本质是一个带角色切换判据的检索 Agent loop；Refiner 解决&#x27;检索结果到 LLM 上下文&#x27;的格式/长度/重要性对齐，是团队知识库问答的日常痛点，消融量化了不经精炼直接塞给 LLM 的代价（F1 降 14.2%）；&#x27;纯 prompting 难以让 7B 模型稳定输出工具调用格式&#x27;的失败模式对团队的提示设计与 harness 设计有直接警示价值。论文虽含 RL/SFT 训练环节（团队不做模型训练），但其架构模式与实验结论可在不训练的前提下借鉴。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p></div></div></body></html>

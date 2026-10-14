@@ -16,7 +16,13 @@ SITE_URL = "https://lijiat.github.io/ai-knowledge-hub/"
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--status", action="store_true", help="Read deployment status without publishing")
+    parser.add_argument("--message", default="Publish AI knowledge hub static sites", help="Commit message")
     args = parser.parse_args()
+    if not args.status and (ROOT / "docs/papers/index.html").exists():
+        manifest = json.loads((ROOT / "PAPER_SNAPSHOT_LOCAL.json").read_text())
+        assets = json.loads((ROOT / "PAPER_ASSETS_LOCAL.json").read_text())
+        if assets.get("stage") != "complete" or assets.get("snapshot_id") != manifest["snapshot_id"] or len(assets.get("assets", {})) != manifest["pdf_count"]:
+            raise SystemExit("Paper PDF assets are not fully published; run publish_paper_pdfs.py first.")
     token_file = Path.home() / ".config/github-pages/token"
     token = token_file.read_text().strip() if token_file.is_file() else (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "")
     if not token:
@@ -93,9 +99,9 @@ def main():
             raise SystemExit("Local origin differs; leaving it unchanged.")
     else:
         git("remote", "add", "origin", info["clone_url"])
-    git("add", "--", ".gitignore", "README.md", "docs", "scripts/sync_gzh.py", "scripts/publish_github.py")
+    git("add", "--", ".gitignore", "README.md", "docs", "scripts/sync_gzh.py", "scripts/sync_radar.py", "scripts/sync_papers.py", "scripts/publish_paper_pdfs.py", "scripts/publish_github.py")
     if git("diff", "--cached", "--quiet", allowed=(0, 1)).returncode == 1:
-        git("commit", "-m", "Publish AI knowledge hub static sites")
+        git("commit", "-m", args.message)
     commit = git("rev-parse", "HEAD").stdout.strip()
     print("Prepared commit:", commit, flush=True)
 
@@ -108,7 +114,7 @@ def main():
             if key.startswith("GIT_TRACE") or key == "GIT_CURL_VERBOSE":
                 environment.pop(key)
         environment.update({"GH_TOKEN": token, "GITHUB_LOGIN": user["login"], "GIT_ASKPASS": str(askpass), "GIT_TERMINAL_PROMPT": "0"})
-        git("-c", "credential.helper=", "-c", "http.proxy=http://127.0.0.1:7897", "push", "--set-upstream", "origin", "main", environment=environment)
+        git("-c", "credential.helper=", "-c", "http.proxy=http://127.0.0.1:7897", "-c", "http.version=HTTP/1.1", "push", "--set-upstream", "origin", "main", environment=environment)
     print("Pushed main to GitHub.", flush=True)
     state.update({"stage": "pushed", "commit": commit})
     state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2))

@@ -1,0 +1,112 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>面向数据中心 Silicon Debug 的远程 Probeless（无探针）调试方法学</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Remote and Probeless Debug Methodology for Data Center Silicon Debugs</h1>
+<p class="lead">面向数据中心 Silicon Debug 的远程 Probeless（无探针）调试方法学</p>
+<div style="margin-top:10px"><span class="lvl lvl-medium">medium</span><span class="chip">DVCon 2025</span><span class="chip">故障诊断</span><span class="chip">在线与在役测试</span><span class="chip">2.2 BSCAN/边界测试</span><span class="chip">2.7 CyberSec/自动化</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/p062.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>该论文针对数据中心 RMA 流程中带 CPU failure signature 的硬件单元做 Failure Analysis 时，传统依赖物理接触与侵入式 JTAG 探针导致物流成本高、停机时间长的问题，提出一种无需物理探针的远程 Silicon Debug 方法。方法核心是复用服务器 BMC 内集成的 JTAG（IEEE Std 1149.1）controller 作为调试访问通道：初始架构将 RDDI server 与 Probe API 置于 host 侧，每条低层 JTAG Shift-IR/Shift-DR 操作都承受一次网络往返，实测比物理探针调试慢约 30 倍；优化架构将二者下沉到 BMC 本地执行，高频 JTAG 事务不再穿越网络，仅高层命令与结果走网络。结果显示优化后命令执行速度接近传统探针调试水平，恢复了远程无探针 FA 的实用性。对团队而言，其&quot;协议智能下沉到靠近被测件的边缘设备&quot;的架构原则与 IEEE 1149.1 JTAG 访问实践，对 IP 在系统端的远程调试访问设计有借鉴价值。</p>
+<h2>问题</h2><p>数据中心规模庞大、uptime 压力高，RMA（Return Material Authorization）流程中对筛出 CPU failure signature 的单元需进行 Failure Analysis（FA）；传统调试依赖物理系统接触和侵入式 JTAG 探针，需要大量技术工时、专用设备并造成系统停机，在数据中心场景下物流与经济成本高、难以规模化。论文要解决的是：在不依赖物理探针和直接物理接触的前提下，对数据中心/RMA 系统中的 SoC 完成深度 Silicon Debug 与根因分析。</p>
+<h2>方法</h2><p>利用服务器主板上 BMC 内集成的 JTAG（IEEE Std 1149.1）controller 作为远程调试访问通道，经 BMC firmware/software stack 访问。初始架构：host 上的调试工具（ARM-DS、scandump/memdump/jtag application）经 RDDI server 与 Probe API 转成 RPC 发往 BMC 的 RPC server，再由 BMC JTAG driver 驱动目标 SoC；由于每条低层 JTAG 操作都产生一次 Host-&gt;BMC-&gt;Host 网络往返，性能慢约 30 倍。优化架构：将 RDDI server 与 Probe API 迁移到 BMC 上驻留执行，高层调试命令（如读某内存地址）在 BMC 本地翻译为 Shift-IR/Shift-DR 序列，经本地 IPC/函数调用直接驱动 JTAG driver，仅将最终结果回传 host，从而消除高频 JTAG 事务的网络延迟。论文进一步给出可推广原则：BMC 作为具备本地 JTAG 控制能力的&quot;智能调试代理&quot;，可适配不同协议/中间件，例如开发相应 server 组件后可能集成 Lauterbach TRACE32。</p>
+<h2>关键结果</h2><p> 初始远程调试架构（RDDI server/Probe API 位于 host 侧）的命令执行速度比使用物理探针直连 host 的传统 JTAG 调试慢约 30 倍（approximately 30 times slower），根因是每条低层 JTAG 操作都引入一次网络往返延迟。</p><p> 优化架构（RDDI server 与 Probe API 迁移至 BMC 本地）实测命令执行速度接近（nearly equivalent）传统基于探针的调试水平，关键因素是绝大多数 JTAG 事务不再经历网络往返。</p>
+<h2>创新点</h2><p>相对依赖物理 JTAG 探针的传统调试方式，主要区别在于：1) 完全复用服务器 BMC 中已有的 JTAG controller，实现 probeless、非侵入的远程 Silicon Debug，免去现场插拔探针与系统停机；2) 关键创新是将调试协议智能（RDDI server 与 Probe API）从 host 迁移到 BMC 本地执行，使高频 Shift-IR/Shift-DR 事务局限在 BMC 内部，仅高层命令与结果走网络，消除网络往返延迟瓶颈；3) 将 BMC 重新定位为具备本地 JTAG 控制能力的 intelligent debug agent 而非被动物理接口代理，并抽象出可推广的四步架构原则（远程下发高层请求、BMC 本地翻译为 JTAG 交互、驱动目标 SoC、回传结果）。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>medium</p><p><b>命中能力域：</b>2.2 BSCAN/边界测试</p><p><b>理由：</b>论文核心是数据中心场景下基于 BMC 内置 JTAG（IEEE Std 1149.1）controller 的远程 Silicon Debug 架构与网络延迟优化，属于系统级 post-silicon 调试基础设施，不直接命中 2.1（Scan/ATPG/门级验证）、2.3（OCC/LBIST/CODEC）、2.4（HBM4/UCie 测试）、2.5（功能安全）、2.6（Fault simulation）的核心技术。与团队能力域的关联点在 2.2：论文中的 Shift-IR/Shift-DR 事务、JTAG driver、TAP 级操作与团队 BSCAN 环境所依赖的 IEEE 1149.1 基础设施同源，可作为理解服务器系统中 IP 的 JTAG 访问路径（BMC 作为 JTAG master）的 application note 级参考；但其用途是 debug access（配合 ARM RDDI/ARM-DS），并非 boundary scan 测试本身，未涉及 instruction 行为、DRAM connected/non-connected 配置或 BSCAN mismatch debug，故判为 medium 而非 high。上游 catalog 给出的 2.7（CyberSec/自动化）标签在正文中缺乏实质支撑：论文未涉及 threat modeling、QMS readiness/release gate、JAMA/FMEDA/DFMEA 自动化等内容，仅描述调试通道的工程实现，故不匹配 2.7。</p><p><b>建议动作：</b>作为方法参考存档</p>
+<h2>中文全文</h2><figure><img src="assets/p062/figures/fig_1.png" alt="" loading="lazy"></figure>
+<h2>Mamatha Kallimatada, Google IT Services India Private Limited Sasidhar Sunkari, Google IT Services India Private Limited David Kapchits, Google Israel Limited</h2>
+<p>摘要 - 鉴于现代数据中心的规模，维持硬件可靠性和性能面临重大挑战。数据中心运营的特点是高复杂性、大规模以及维持正常运行时间的持续压力。退货授权（RMA）流程涉及对故障硬件组件的诊断和更换。我们每月与供应商处理大量的RMA。其中少量单元在筛选时呈现CPU故障特征，从而触发故障分析（FA）流程。维护这些系统的一个重大挑战是硬件故障的调试。依赖物理访问和侵入式探针的传统调试方法加剧了这些挑战。本方法论引入了一种新颖的远程调试方法，消除了对物理硬件访问的需求。在本方法论的背景下，成功实施的前提条件是所有涉及的基础板管理控制器（BMC）均配备有可正常工作的JTAG控制器。本方法论利用BMC现有的JTAG控制器，该控制器提供了深度硅故障分析所需的行业标准访问能力。虽然高层BMC通道对于初步分诊有效，但JTAG仍然是深度硅故障分析不可或缺的工具，尤其是在其他接口无响应的严重挂死情况下。利用BMC的JTAG控制器，所提出的调试器能够在数据中心RMA流程中高效地排查片上系统（SoC）问题，并带来若干关键优势。</p>
+<p>关键词 - 远程调试、无探针调试、数据中心、故障分析、硅调试、基础板管理控制器（BMC）、JTAG（Joint Test Actions Group，联合测试行动组）、RDDI（Remote Debug Device Interface，远程调试设备接口）、网络延迟、硬件诊断。</p>
+<h2>I.   INTRODUCTION</h2>
+<p>现代数据中心的运营复杂性和庞大规模要求硬件具备极高的可靠性，并将停机时间降至最低。退货授权（Return Material Authorization, RMA）流程是管理硬件故障的关键环节，通常涉及复杂的故障分析（failure analysis, FA）以诊断根本原因，对于表现出CPU故障特征的组件尤其如此。传统的硬件调试方法严重依赖物理系统访问和侵入式JTAG探针的使用，在数据中心环境下带来了巨大的后勤和经济挑战 [1][3]。这些方法通常需要耗费大量技术人员时间、使用专用设备，并可能导致系统停机时间延长，从而影响服务可用性并增加运营支出。因此，对高效、可扩展且非侵入式诊断技术的需求至关重要。本文提出了一种专为数据中心环境设计的新型远程“无探针”调试方法。其核心原理是利用服务器主板上基础板管理控制器（Baseboard Management Controller, BMC）中普遍集成的JTAG [2]（Joint Test Action Group，联合测试行动组，IEEE Std 1149.1）控制器。通过利用这一现有硬件能力，无需物理探针或直接访问被测系统（system under test, SUT）即可建立远程调试会话。该方法的一个关键前提是存在可通过BMC固件/软件栈访问的功能正常的JTAG控制器。所提出的方法具有以下几项关键优势：</p>
+<figure><img src="assets/p062/figures/fig_2.png" alt="" loading="lazy"></figure>
+<p>本文详细阐述了该方法的演进历程：从初始架构出发，逐步发展为克服关键性能限制的优化方案。第II节介绍初始方法及其性能瓶颈。第III节给出优化后的架构。第IV节讨论性能改进。第V节探讨该方法更广泛的适用性和收益，第VI节对全文进行总结。</p>
+<h2>II.   INITIAL REMOTE DEBUG ARCHITECTURE AND LIMITATIONS</h2>
+<p>初始实现遵循了传统的远程调试范式。在该模型中，主机上的用户使用 ARM-DS 或调试实用程序（scandump、memdump 或 jtag 应用程序）发起调试命令。这些工具与 RDDI（Remote Debug Device Interface，远程调试设备接口）服务器进行通信；RDDI 是一种用于在主机与目标设备之间进行调试通信的协议。该服务器与 Debug ProbeAPI 通信，由后者将 RDDI 命令转换为 RPC（Remote Procedure Call，远程过程调用）。在 BMC 侧，有一个 RPC 服务器监听这些消息，通过 BMC 的 JTAG 接口与目标硬件通信，并建立调试会话。所得到的数据被返回至 RDDI 服务器，经过处理后转发回调试工具，供用户查看。</p>
+<p>其概念示意如下：</p>
+<p>调试工具（主机）-&gt; RDDI 服务器（主机）-&gt; Probe API（主机）-&gt; 网络（RPC）-&gt; BMC（RPC 服务器 -&gt; JTAG 驱动）-&gt; 目标 SoC</p>
+<p>尽管该架构在功能上可用，但性能评估显示，其速度比使用直接连接到主机的物理探针的传统 JTAG 调试慢约 30 倍。根本原因被确定为主机与 BMC 之间产生的过多网络流量。高层调试命令（例如读取一块内存）会被 RDDI 服务器分解为大量单独的 JTAG Shift-IR 和 Shift-DR 操作。在通过所述架构执行时，这些低层操作中的每一个都会引入一次网络往返（主机 -&gt; BMC -&gt; 主机）的延迟。对于复杂的调试序列，这种延迟的累积效应使得该方法在典型的失效分析（FA）工作流程中变得不切实际。</p>
+<h2>III.   OPTIMIZED BMC-RESIDENT DEBUG ARCHITECTURE</h2>
+<p>为了缓解由网络延迟造成的严重性能瓶颈，我们实施了一项重大的架构修改。核心改动是将负责把高层调试请求转换为低层 JTAG 事务的组件从主机迁移到了 BMC 本身。</p>
+<p>修改后的架构在概念上如下图所示：</p>
+<p>调试工具（主机）-&gt; 网络 -&gt; BMC（RDDI 服务器 -&gt; Probe API -&gt; JTAG 驱动）-&gt; 目标 SoC</p>
+<p>在这一优化模型中，主机上的用户仍然使用其偏好的工具发出相同的高层调试命令。这些高层命令通过网络直接传输到 BMC。RDDI 服务器和 Probe API 逻辑现在驻留并运行在 BMC 上。驻留在 BMC 上的 RDDI 服务器接收高层命令（例如“读取内存地址 0x1000”）。在 BMC 上本地运行的 RDDI 服务器将其转换为所需的低层 JTAG Shift-IR 和 ShiftDR 操作序列。这些低层 JTAG 操作直接（通过 BMC 软件环境内的本地进程间通信或函数调用）传递给 BMC 的 JTAG 驱动。JTAG 驱动与目标 SoC 交互。只有高层命令的最终结果（例如读取到的内存内容）会被打包并通过网络回传给主机调试工具。</p>
+<h2>IV. PERFORMANCE EVALUATION OF OPTIMIZED ARCHITECTURE</h2>
+<p>第III节所述的架构转变带来了显著的性能提升。通过在 BMC 上执行 RDDI 服务器和 Probe API，从高层调试命令到低层 JTAG 扫描的转换在本地完成。因此，高频的 Shift-IR/Shift-DR 操作不再经由网络传输。网络通信主要仅限于传输频率较低的高层调试命令及其对应结果。对该优化架构的性能测量表明，其命令执行速度几乎与传统基于探针的调试环境所达到的速度相当。为绝大多数 JTAG 事务消除网络往返延迟是实现这一性能对等的关键因素。这使得远程无探针调试方法在数据中心失效分析（FA）任务中重新具备了实际可行性。</p>
+<figure><img src="assets/p062/figures/fig_3.png" alt="" loading="lazy"></figure>
+<h2>V. DISCUSSION</h2>
+<p>优化架构的成功凸显了网络延迟对远程 JTAG 操作的关键影响，并证明了将协议智能本地化的有效性。将 JTAG 事务生成逻辑（在本实现中为 RDDI 服务器）迁移到最靠近目标硬件的边缘设备（BMC）上，对于获得可接受的性能至关重要。尽管本实现采用了 RDDI 协议，但其底层原理具有广泛的适用性。核心需求是一种能够完成以下操作的机制：1. 将高层调试请求从远程主机传输至 BMC。2. 在 BMC 上执行逻辑，将这些请求转换为相应的底层硬件（JTAG）交互。3. 利用 BMC 的 JTAG 控制器与目标 SoC 进行交互。4. 将结果返回给远程主机。替代实现有可能采用不同的协议或中间件。例如，可以在 BMC 上开发定制的服务器应用程序，用于解析来自各种调试器的命令。如果开发出相应的服务器组件和 BMC JTAG 驱动接口，与其他行业标准工具（例如 Lauterbach TRACE32）的集成也可能是可行的。其核心要素仍然是 BMC 作为能够执行本地 JTAG 控制的智能调试代理所扮演的角色，而不仅仅是一个被动的物理接口代理。首要前提仍然是 BMC 平台上具备可用且可访问的 JTAG 控制器。确保 BMC 固件和软件为 JTAG 操作提供可靠支持，对于该方法的部署至关重要。所实现的各项收益——减少停机时间、提升效率、节约成本以及可扩展性——使这种远程无探针方法成为在复杂数据中心环境中管理硬件诊断的宝贵工具。它显著降低了对 RMA（退货授权）单元开展详细硅失效分析的门槛，有望更快地识别系统性问题并推动硬件版本的改进。</p>
+<h2>VI. CONCLUSION</h2>
+<p>本文提出了一种专为数据中心硅失效分析量身定制的远程无探针调试方法，该方法利用了服务器 BMC 中集成的 JTAG 控制器。其初始架构由于传输底层 JTAG 命令所产生的网络延迟而存在令人难以接受的性能限制。本文提出的关键创新在于一项架构转变，即将调试协议智能（RDDI server 和 Probe API）迁移至 BMC 本身。这一优化将高频 JTAG 事务限制在 BMC 本地执行，大幅减少了网络流量，并消除了由此带来的延迟瓶颈。由此得到的方法实现了与传统基于探针的调试相当的性能，同时保留了远程、非侵入式访问的显著运营优势。这种方法在降低成本、提升诊断效率和增强可扩展性方面带来了显著收益，是大规模数据中心运营中硬件调试实践的一项重大进步。</p></div></div></body></html>

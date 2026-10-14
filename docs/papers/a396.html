@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>从稀疏到稠密：基于 Chain of Density 提示的 GPT-4 摘要生成</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>From Sparse to Dense: GPT-4 Summarization with Chain of Density Prompting</h1>
+<p class="lead">从稀疏到稠密：基于 Chain of Density 提示的 GPT-4 摘要生成</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">arXiv</span><span class="chip">提示技术</span><span class="chip">评测基准</span><span class="chip">成本与效率</span><span class="chip">基于arXiv版本</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/a396.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>摘要在信息密度与可读性之间需要权衡，但&quot;多密才算合适&quot;长期缺乏量化答案。论文提出 Chain of Density (CoD) 提示模式：让 GPT-4 先生成实体稀疏的初稿摘要，再在固定长度下迭代约5步、每步融合1-3个前序遗漏的关键实体，逐步提高实体密度。在100篇 CNN/DailyMail 文章上的人类偏好实验显示，人类偏好的摘要密度（约0.15实体/token）明显高于 vanilla GPT-4 提示（0.122），几乎与人工摘要（0.151）持平；CoD 摘要还更抽象、融合更多、lead bias 更低。GPT-4 Likert 评测表明信息量随密度上升但在第4步见顶，而 Quality/Coherence 更早下滑，证实信息量与可读性存在权衡。对团队而言，其迭代式提示模式可直接复用于文档摘要与答案压缩，其&quot;人类偏好 + LLM-as-judge + 相关性校验&quot;的评测设计也可作为内部评测体系建设的模板。</p>
+<h2>问题</h2><p>摘要应包含多少信息（信息密度）难以把握：太稀疏则信息不足，太稠密则难以阅读甚至出现事实错误。论文要量化&quot;信息量 vs 可读性&quot;的权衡，确定人类偏好的摘要密度，并探索在不训练模型的前提下，仅通过提示让 GPT-4 在固定长度内生成可控信息密度的摘要。</p>
+<h2>方法</h2><p>提出 Chain of Density (CoD) 单一提示模式：GPT-4 先生成仅聚焦1-3个初始实体的稀疏摘要，随后在固定 token 预算内迭代5步，每轮从原文识别1-3个前序摘要遗漏的显著实体并融合进去，通过抽象（abstraction）、压缩（compression）与融合（fusion）腾出空间而不增加总长度；以每 token 实体数作为密度代理。评测上结合人类偏好研究（4位标注者、100篇 CNN/DailyMail、500条摘要选第一名）与 GPT-4 Likert 五维打分（Informative/Quality/Coherence/Attributable/Overall），并用 extractive density、基于 ROUGE 增益的源句对齐数、内容位置分布分别度量抽象度、融合度与 lead bias。</p>
+<h2>关键结果</h2><p> 实体密度从初始 0.089（低于人工摘要的 0.151 与 vanilla GPT-4 提示的 0.122）经5步致密化升至 0.167</p><p> 人类偏好研究：61% 的第一名票投给 ≥3 步致密化的摘要，中位偏好步数为 3，期望步数 3.06；据此推断偏好密度约 0.15，接近人工摘要的 0.151</p><p> GPT-4 Likert 评测：Informativeness 随密度上升、第 4 步达峰值 4.74；Quality 与 Coherence 分别在第 2 步和第 1 步后开始下滑；Overall 平均分以中间三步最高（4.78、4.77、4.76）</p><p> Overall 指标与人类偏好的 summary-level Pearson 相关最高为 0.31，整体相关性偏低；标注者间 Fleiss&#x27; kappa 仅 0.112</p><p> 第二步平均缩短 5 个 token（72→67）；所有 CoD 摘要比人工与 baseline 摘要更抽象；发布 500 条已标注与 5000 条未标注 CoD 摘要数据集</p>
+<h2>创新点</h2><p>区别于以往依赖监督微调、或仅将实体用于控制/忠实性/评估的摘要工作，CoD 仅通过单一提示在推理时迭代致密化，无需任何训练即可在固定长度下精细控制摘要密度；论文指出摘要信息密度是此前被忽视的维度，并以实体密度为代理、用人类偏好系统量化了&quot;信息量-可读性&quot;权衡，给出偏好密度参考值（约0.15，接近人工摘要水平）。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>3.2 提示工程 | 3.5 评测与可靠使用</p><p><b>理由：</b>CoD 是一个可直接复用的提示工程模式：在单条提示内通过迭代改写、固定输出预算逐步追加约束，属于 3.2 提示技术的核心范畴；同时论文的评测方法论——小规模人类偏好研究 + GPT-4-as-judge Likert 打分 + 人机相关性校验、以及对低标注一致性（Fleiss&#x27; kappa 0.112）做系统级聚合的处理方式——是 3.5 评测方法的直接范例。论文还把&quot;更少 token 承载更多信息&quot;与 LLM 解码延迟、实时应用成本联系起来，与 3.5 的成本效率关注点呼应。对团队的文档摘要、RAG 答案压缩与 LLM 输出评测体系建设均有直接参考价值。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><p>（中文译文生成中，稍后自动补充；本页当前仅含摘要与评估。）</p><h2>证据核查</h2><p class='muted'>1 条证据未在原文中核对到</p></div></div></body></html>

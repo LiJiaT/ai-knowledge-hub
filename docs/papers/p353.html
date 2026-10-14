@@ -1,0 +1,144 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>面向持续 SoC 验证工作流中成本感知 LLM 辅助的被动式 Token 计量（Passive Token Accounting）</title>
+<style>
+:root{--panel:#1a222d;--border:#2d3a4d;--text:#e8eef5;--muted:#9fb0c3;
+  --accent:#5eb8ff;--accent2:#7ee0b8;--warn:#ffc66d;--link:#8ab4ff;
+  --pill-bg:rgba(94,184,255,.12);--pill-border:rgba(94,184,255,.45);--bg:#121922;
+  --sans:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+a{color:var(--link)}
+.shell{max-width:74rem;margin:0 auto;padding:1.1rem 1.2rem 3rem}
+.hero{background:var(--panel);border-radius:9px;padding:1.2rem 1.4rem;margin-bottom:1rem;
+  border:1px solid var(--border)}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;color:var(--muted);font-weight:700;text-transform:uppercase}
+.hero h1{margin:.3rem 0 .4rem;font-size:1.35rem}
+.hero .lead{color:var(--muted);font-size:.85rem;margin:0 0 .6rem}
+.pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+.pill{background:rgba(159,176,195,.1);border:1px solid var(--border);color:var(--muted);
+  border-radius:999px;padding:.16rem .6rem;font-size:.8rem;font-family:var(--mono)}
+.pill.hot{background:rgba(126,224,184,.14);border-color:rgba(126,224,184,.5);color:var(--accent2)}
+.pill.warn{background:rgba(94,184,255,.12);border-color:var(--pill-border);color:var(--accent)}
+.pill.strong{background:var(--pill-bg);border-color:var(--pill-border);color:var(--accent)}
+.back{display:inline-block;margin-bottom:.7rem;color:var(--link);text-decoration:none;font-size:.85rem}
+.filterbar{background:var(--panel);border:1px solid var(--border);border-radius:9px;
+  padding:.55rem .8rem;margin-bottom:.9rem;display:flex;gap:.7rem;flex-wrap:wrap;
+  align-items:center;position:sticky;top:0;z-index:20;
+  box-shadow:0 10px 24px -14px rgba(0,0,0,.8)}
+.filterbar label{font-size:.72rem;color:var(--muted);margin-right:.15rem;text-transform:uppercase;
+  letter-spacing:.04em}
+.filterbar input,.filterbar select{padding:.26rem .55rem;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:.85rem}
+.filterbar input:focus,.filterbar select:focus{outline:none;border-color:var(--pill-border)}
+.card{background:rgba(94,184,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:.75rem .9rem;margin-bottom:.6rem;display:flex;gap:.85rem;transition:border-color .12s}
+.card:hover{border-color:var(--pill-border)}
+.card[data-level="high"]{border-left:3px solid var(--accent2)}
+.card[data-level="medium"]{border-left:3px solid var(--accent)}
+.rank{color:var(--muted);font-weight:700;min-width:2rem;font-family:var(--mono)}
+.card h3{margin:0 0 .2rem;font-size:1.02rem}.card h3 a{color:var(--text);text-decoration:none}
+.card h3 a:hover{color:var(--accent)}
+.card .sub{color:var(--muted);font-size:.8rem;margin:.1rem 0 .35rem}
+.card .oneliner{color:var(--text);opacity:.82;font-size:.85rem}
+.card .desc{color:var(--text);opacity:.85;font-size:.85rem;line-height:1.55;
+margin:.15rem 0 .45rem;display:-webkit-box;-webkit-line-clamp:3;
+-webkit-box-orient:vertical;overflow:hidden}
+.card .tags{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.card .tags .chip{font-size:.68rem;padding:.08rem .45rem}
+.lvl{display:inline-block;font-size:.68rem;font-weight:700;padding:.08rem .5rem;
+  border-radius:999px;font-family:var(--mono)}
+.lvl-high{background:rgba(126,224,184,.16);color:var(--accent2)}
+.lvl-medium{background:rgba(94,184,255,.14);color:var(--accent)}
+.lvl-low{background:rgba(159,176,195,.1);color:var(--muted)}
+.lvl-pending{background:rgba(159,176,195,.1);color:var(--muted)}
+.card[data-level="pending"]{border-left:3px solid var(--border);opacity:.65}
+.chip{display:inline-block;background:rgba(159,176,195,.08);border:1px solid var(--border);
+  color:var(--muted);border-radius:999px;padding:.12rem .5rem;font-size:.75rem;margin:.15rem .3rem .15rem 0}
+.detail h2{margin-top:1.6rem;border-bottom:1px solid var(--border);padding-bottom:.35rem;
+  font-size:1.05rem;color:var(--accent)}
+.detail figure{margin:1rem auto;text-align:center;max-width:fit-content}
+.detail img{max-width:100%;border:1px solid var(--border);
+  border-radius:6px;background:#fff}
+.detail figcaption{color:var(--muted);font-size:.78rem;margin-top:.3rem}
+.detail div.tablewrap{margin:.8rem auto;max-width:fit-content}
+.detail table{border-collapse:collapse;font-size:.82rem}
+.detail th,.detail td{border:1px solid var(--border);padding:.32rem .55rem;text-align:left}
+.detail th{background:rgba(94,184,255,.08);color:var(--accent)}
+.detail p{margin:.6rem 0}
+.muted{color:var(--muted);font-size:.8rem}
+.pdfbtn{display:inline-block;background:var(--pill-bg);border:1px solid var(--pill-border);
+  color:var(--accent);padding:.45rem 1rem;border-radius:8px;text-decoration:none;
+  margin:.7rem 0;font-size:.9rem}
+.pdfbtn:hover{background:rgba(94,184,255,.2)}
+</style></head><body><div class="shell">
+<a class="back" href="index.html">← 返回论文库</a>
+<div class="hero"><div class="eyebrow">PAPER LIBRARY · 详情</div>
+<h1>Passive Token Accounting for Cost-Aware LLM Assistance in Continuous SoC Verification Workflows</h1>
+<p class="lead">面向持续 SoC 验证工作流中成本感知 LLM 辅助的被动式 Token 计量（Passive Token Accounting）</p>
+<div style="margin-top:10px"><span class="lvl lvl-high">high</span><span class="chip">DVCon 2026</span><span class="chip">验证自动化</span><span class="chip">EDA工具</span><span class="chip">2.7 EDA/验证自动化与 AI 辅助</span><span class="chip">2.4 设计验证方法论</span></div></div>
+<a class="pdfbtn" href="https://github.com/LiJiaT/ai-knowledge-hub/releases/download/papers-20261014-f1a4a6f42671/p353.pdf">下载原文 PDF</a>
+<div class="detail"><h2>简介</h2><p>论文针对 LLM 嵌入 pre-silicon 验证流程（日志摘要、失败聚类、spec Q&amp;A、自动 debug 规划）后的新运营风险——token 开销：持续回归产生海量日志，调用费用持续累积，而传统 EDA 基础设施没有 &#x27;LLM 成本&#x27; 概念，验证负责人无法回答 triage bot 花了多少钱、哪些测试最烧 token。方法上提出 Passive Token Accounting（PTA），在 dVI™ 产品线中分三层实现：在开源 dhenara-ai 的 LLM 客户端层以 provider 无关的统一 schema 提取 usage 并按 per-million 费率换算成本；在 agent runtime 做多步执行级聚合；在回归边界生成 append-friendly 的 per-regression 成本快照供轻量 API/UI 消费。PTA 全程被动集成，不修改 generator/testbench 代码与回归编排，并支持 per-phase 预算、soft cap 下模型降级与测试/agent 级归因。在基于开源 CORE-V 的 RTL 仿真失败用例上，同一测试跨三家 provider 的 token/成本被一致记录（如 86707 tokens/cost 0.361617 与 74697 tokens/cost 0.048747），验证了跨 provider 统一计量的可行性。</p>
+<h2>问题</h2><p>LLM 被广泛嵌入 pre-silicon 验证流程（日志摘要、失败聚类、spec Q&amp;A、自动 debug 规划）后，token 开销成为新的运营风险：持续回归可产生数以万计的日志，每次 LLM 调用的费用不断累积为可观的云账单或挤占 on-prem GPU 容量；agentic 工作流中大量 agent 并发多轮调用使成本更难追踪；传统 EDA 基础设施没有原生的 &#x27;LLM 成本&#x27; 概念，验证负责人无法回答上周 triage bot 花了多少钱、哪些测试消耗 token 最多、启发式改动是否使 API 账单翻倍等问题。</p>
+<h2>方法</h2><p>提出 Passive Token Accounting（PTA），实现在 dVI™（Dhenara Verification Intelligence）产品线中，分三层：(1) 在开源 dhenara-ai 的 LLM 客户端层做 provider 无关的 usage 提取，用统一 typed schema（如 ChatResponseUsage、UsageCharge）支持 OpenAI、Anthropic、Google AI、Azure、Bedrock 及本地模型服务器，并按 per-million token 费率换算成本；(2) 在 agent runtime 做执行级聚合，覆盖多步/工具调用型 agent 工作流，输出 per-node/per-agent 成本；(3) 在回归边界持久化 append-friendly 的 per-regression 快照（.dad 目录下 costs.json、usage.jsonl），由无状态 gateway 通过 /api/regs/{rid}/costs 提供 UI 查询，评估阶段不使用数据库。PTA 是被动式的，不修改 generator/testbench 代码与回归编排，本地与 farm 环境均适用，并支持 per-phase 预算、soft cap 触发的模型降级等预算感知策略。</p>
+<h2>关键结果</h2><p> 在派生自开源 CORE-V 仓库的 DUT/testbench 的 RTL 仿真失败用例上，对同一失败测试跨三家 provider 运行 Deep Debug，PTA 在 usage.json 中一致记录 token 用量与成本，例如 78249 prompt / 8458 completion / 86707 total tokens、cost 0.361617；57513/17184/74697、cost 0.048747；79620/10847/90467、cost 0.207995</p><p> usage.jsonl 按单次调用记录 provider/model/phase 维度，示例：anthropic 的 claude-sonnet-4-5-20250929 在 execute 阶段一次调用 10582 tokens、cost 0.05073</p><p> PTA 以被动方式集成，不修改 generator/testbench 代码与回归编排，本地与 farm 两种运行环境均适用</p><p> 评估阶段 gateway 无状态、直接读取 JSON artifact，未使用数据库</p>
+<h2>创新点</h2><p>与依赖单一 provider dashboard、围绕单一 SDK 的定制 wrapper 或通用 observability 管道不同，PTA 在 LLM 客户端层建立 provider 无关的统一 usage/cost 类型系统，可跨 OpenAI、Anthropic、Google AI、Azure、Bedrock 与本地模型一致计量；并将成本遥测锚定到回归 artifact，形成回归级 &#x27;source of truth&#x27;，从而支持测试/agent 级归因与预算感知策略（soft cap 触发模型降级），且以被动方式集成、不改动现有验证编排、不锁定单一 provider。</p>
+<h2>团队参考意义</h2><p><b>相关度级别：</b>high</p><p><b>命中能力域：</b>2.7 EDA/验证自动化与 AI 辅助 | 2.4 设计验证方法学</p><p><b>理由：</b>直接命中 2.7 域的 &#x27;LLM/AI 辅助验证/bug 分析&#x27; 与 &#x27;验证流程自动化&#x27;：团队在持续回归中引入 LLM 辅助 triage/debug/spec 问答时，token 成本计量、预算控制与模型选择是这类能力可持续运营的基础设施；论文场景（持续回归、海量日志、多 agent 并发多轮调用、本地与 farm 运行）与团队大规模回归交付场景一致，且核心组件 dhenara-ai 为 MIT 开源、可作为独立 Python 包使用，落地门槛低。对 2.4 域为辅助性命中：论文不涉及 UVM/覆盖率等验证方法本身，而是为 LLM 辅助验证工作流补充成本治理与运营维度。</p><p><b>建议动作：</b>深入精读并做内部分享</p>
+<h2>中文全文</h2><h2>Passive Token Accounting For Cost-Aware LLM Assistance In Continuous SoC Verification Workflows</h2>
+<p>Ajith Jose</p>
+<p>Dhenara Inc.</p>
+<p>ajith.jose@dhenara.com</p>
+<p>摘要 - 大语言模型（LLM）正日益嵌入流片前验证流程之中：日志摘要、失败聚类、规格问答以及自动化调试规划。各团队报告了显著的生产力提升，但也面临一种新的运营风险：token 支出。持续回归测试可能产生数以万计的日志；而每一次 LLM 调用，无论多么微小，都会累积成不容忽视的云账单，或与本地部署（on-prem）GPU 容量形成竞争。传统电子设计自动化（EDA）基础设施原生并不具备“LLM 成本”的概念，致使验证负责人无法回答：上周的分诊机器人（triage bot）花费了多少？哪些测试消耗的 token 最多？某次启发式规则的改动是否让我们的 API 账单翻了一倍？</p>
+<p>我们提出被动式 Token 记账（PTA），这是 dVI™（Dhenara Verification Intelligence）产品线中的一项实现，它无需修改现有测试或编排脚本，即可提供与提供商无关、低开销的成本可观测性。PTA 从模型响应中提取用量信息，对不同提供商的成本进行归一化，并持续聚合每次回归的快照，供一个轻量级 API 和 UI 消费。该方法支持按阶段预算、软上限下的模型降级，以及对测试和智能体（agent）的细粒度归因——同时保持提供商可移植性。</p>
+<h2>I.   INTRODUCTION</h2>
+<p>过去两年间，大语言模型（LLM）已被广泛采用于各类验证流程之中。然而，大多数团队仍将 LLM 运行时视为黑盒。成本可能因冗长日志、级联失败或隐蔽的重试循环而激增。在智能体（agentic）工作流中，这种情况更为混乱，因为大量智能体可能以多轮对话的方式进行并发调用。由于回归测试持续运行，即使是中等程度的浪费也会累积成可观的支出。一个有效的解决方案需要：</p>
+<p>PTA 在 dVI™ 中通过将成本遥测集成到 LLM 层（dhenara-ai [1]）、将归一化后的指标传播到智能体运行时，并在回归边界处将其聚合为单一事实来源，从而满足上述需求。</p>
+<p>贡献：(1) 在 LLM 客户端层（dhenara-ai [1]）而非单一提供商 SDK 处捕获的与提供商无关的用量与成本模式（schema）；(2) 适用于多步骤/使用工具的智能体工作流的执行级聚合；以及 (3) 一种以回归为范围、便于追加的快照，能够在不修改现有编排的情况下实现归因与预算感知策略。</p>
+<h2>II.   BACKGROUND AND RELATED WORK</h2>
+<p>许多团队依赖提供商仪表板、围绕单一软件开发工具包（SDK）构建的定制封装层，或通用可观测性流水线来了解 LLM 用量。这些方法可能颇有价值，但往往难以跨提供商通用，并且会使指标在不同工具与环境之间碎片化。PTA 则依赖于 dhenara-ai [1] 中一套与提供商无关的类型系统，以一致的方式捕获用量：</p>
+<p>dhenara-ai 是采用 MIT 许可证的开源项目 [1]。它公开可用，其提供商适配器与带类型的响应模式（schema）可作为独立的 Python 包直接使用。</p>
+<p>这使得 dVI™ 能够以统一的记账方式支持 OpenAI [2]、Anthropic [3]、Google AI [4]、Azure、Bedrock 以及本地模型服务器。同一模式还为智能体框架（DAD）提供支撑，用于呈现每个节点的用量并聚合每个智能体的成本，从而避免为每个提供商单独编写定制适配器。</p>
+<h2>III.   DVI ARCHITECTURE OVERVIEW (WHERE PTA LIVES)</h2>
+<figure><img src="assets/p353/figures/fig_1.png" alt="Fig.1 - dVI™ 架构" loading="lazy"></figure>
+<figcaption>Fig.1 - dVI™ 架构</figcaption>
+<p>被动令牌记账（PTA）具有三个层次，与代码库直接对应。</p>
+<h2>1 Provider-Agnostic Usage Extraction (dhenara-ai)</h2>
+<p>该层以与提供商无关的形式直接从模型响应中捕获使用情况。</p>
+<h2>2 Execution-Level Aggregation (agent runtime)</h2>
+<p>该层确保核算在多步骤智能体工作流中保持准确。</p>
+<h2>3 Regression-Level Snapshot (dVI™)</h2>
+<p>该层持久化保存一个以回归为作用域的核算“事实来源”（source of truth）工件。</p>
+<p>后端网关通过 /api/regs/{rid}/costs 向用户界面（UI）公开该快照。评估期间不使用数据库；网关是无状态的，直接从工件根目录读取 JSON。</p>
+<h2>V.  IMPLEMENTATION NOTES WITH CODE ANCHORS</h2>
+<p>提供这些锚点旨在支持可复现性；该设计在不同提供商和执行模式（同步/异步、流式）下的工作方式类似。</p>
+<h2>Public evidence (dhenara-ai types)</h2>
+<p>以下与提供商无关的类型来自开源 dhenara-ai 软件包（参见参考文献）。它们展示了贯穿 PTA 使用的规范化 schema：</p>
+<p>class UsageCharge(BaseModel): cost: float charge: float | None classChatResponseUsage(BaseModel): total_tokens: int prompt_tokens: int completion_tokens:int reasoning_tokens: int | None</p>
+<p>成本计算将每百万 token 的费率转换为每 token 的成本：</p>
+<p>cost = round( usage.prompt_tokens * (input_per_million/1_000_000) + usage.completion_tokens * (output_per_million/1_000_000), 6,</p>
+<h2>VI.  POLICY CONTROLS: BUDGETS, SOFT CAPS, AND MODEL SELECTION</h2>
+<p>dVI™ 将预算感知的调节旋钮暴露在最贴近其发挥作用之处：</p>
+<h2>VII.  INTEGRATION WITH CONTINUOUS VERIFICATION (DVI)</h2>
+<p>PTA 的设计是有意被动的：它无需对生成器/测试平台代码或回归编排做任何更改。它既适用于本地环境，也适用于计算农场（farm）环境。dVI™ 将工件写入专用的 artefact dir 目录下，并在 .dad 目录中维护每次回归的状态，其中包括 costs.json。随后，UI 会呈现以下内容：</p>
+<p>这使得 LLM 辅助流程能够与传统 EDA 指标并行，以可预测、预算感知的方式运行。</p>
+<h2>VIII.  EVALUATION</h2>
+<p>我们基于开放测试包（open test bundle）以及将 PTA 集成到测试套件中的内部经验，报告三项实际成果。</p>
+<h2>1 Local runs across providers</h2>
+<p>我们在一次寄存器传输级（RTL）仿真运行期间，针对同一个失败测试，在三家大语言模型（LLM）提供商上运行了 Deep Debug。被测设计（DUT）与测试平台源自开源的 CORE-V 代码仓库 [5-7]。PTA 在 usage.json 中一致地记录了 token 用量，其中包括一条聚合汇总行：</p>
+<p>{ &#x27;prompt_tokens&quot;: 78249, &quot;completion_tokens&quot;: 8458, &quot;total_tokens&quot;: 86707, &quot;cost&quot;: 0.361617 }</p>
+<p>{ &#x27;prompt_tokens&quot;: 57513, &quot;completion_tokens&quot;: 17184, &quot;total_tokens&quot;: 74697, &#x27;cost&quot;: 0.048747000000000006 {</p>
+<p>{ &quot;prompt_tokens&quot;: 79620, &quot;completion_tokens&quot;: 10847, &quot;total_tokens&quot;: 90467, &quot;cost&quot;：0.20799499999999999 {</p>
+<p>usage.jsonl 中的示例行（提供商、模型、阶段）：</p>
+<p>{ &quot;phase&quot;: &quot;execute&quot;, &quot;loop&quot;: 0, &quot;model&quot;:&quot;claude-sonnet-4-5-20250929&quot;, &quot;provider&quot;: &quot;anthropic&quot;, &quot;prompt_tokens&quot;: 9000, &quot;completion_tokens&quot;: 1582, &quot;total_tokens&quot;: 10582, &quot;cost&quot;: 0.05073 }</p>
+<p>汇总表（同一测试，不同提供商/模型）：</p>
+<div class="tablewrap"><table><thead><tr><th>Provider</th><th>Model</th><th>Total tokens</th><th>Cost (USD)</th></tr></thead><tbody>
+<tr><td>Anthropic</td><td>claude-sonnet-4-5-20250929</td><td>86,707</td><td>0.361617</td></tr>
+<tr><td>OpenAl</td><td>gpt-5-mini-2025-08-07</td><td>74,697</td><td>0.048747</td></tr>
+<tr><td>Google Al</td><td>gemini-2.5-pro</td><td>90,467</td><td>0.207995</td></tr>
+</tbody></table></div>
+<p>| Provider   | Model                      |   Total tokens |   Cost (USD) |</p>
+<figure><img src="assets/p353/figures/fig_2.png" alt="Fig.2 - 代表性运行的 Token/成本汇总" loading="lazy"></figure>
+<figcaption>Fig.2 - 代表性运行的 Token/成本汇总</figcaption>
+<h2>XII.  CONCLUSION</h2>
+<p>dVI™ 中的被动式 Token 计量（Passive Token Accounting）为持续验证中大语言模型（LLM）的可持续使用补上了缺失的一环：与提供商无关、低开销、且直接关联到回归测试产物的成本可观测性。通过在 LLM 层对用量与成本进行归一化、在智能体边界进行汇总，并对外提供简单的每次回归快照，团队便可以设定预算、明智地选择模型，并让辅助功能保持开启——而无需重写流程，也无需被锁定在单一提供商上。</p><h2>证据核查</h2><p class='muted'>1 条证据未在原文中核对到</p></div></div></body></html>
