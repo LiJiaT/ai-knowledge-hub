@@ -18,7 +18,9 @@ def main():
     parser.add_argument("--status", action="store_true", help="Read deployment status without publishing")
     args = parser.parse_args()
     token_file = Path.home() / ".config/github-pages/token"
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or token_file.read_text().strip()
+    token = token_file.read_text().strip() if token_file.is_file() else (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "")
+    if not token:
+        raise SystemExit("No GitHub Token configured.")
     client = urllib.request.build_opener(urllib.request.ProxyHandler({"https": "http://127.0.0.1:7897"}))
     headers = {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "ai-knowledge-hub-publisher"}
 

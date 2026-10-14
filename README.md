@@ -25,7 +25,7 @@ GitHub Pages 从 `main` 分支的 `/docs` 目录发布。站内链接使用相�
 
 ## 发布操作
 
-运行 `python3 scripts/publish_github.py` 提交并上传发布目录，再启用 GitHub Pages；运行 `python3 scripts/publish_github.py --status` 查看部署状态。授权从本机 `~/.config/github-pages/token` 或进程环境读取，Token 不进入仓库。
+运行 `python3 scripts/publish_github.py` 提交并上传发布目录，再启用 GitHub Pages；运行 `python3 scripts/publish_github.py --status` 查看部署状态。授权优先从本机 `~/.config/github-pages/token` 读取；该文件不存在时使用进程环境，Token 不进入仓库。
 
 ## 访问地址
 
